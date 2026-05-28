@@ -201,7 +201,9 @@ if command_exists brew; then
     skip "Homebrew already installed"
 else
     NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
+    if ! grep -q "linuxbrew" ~/.bashrc 2>/dev/null; then
+        echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
+    fi
     ok "Homebrew installed"
 fi
 
