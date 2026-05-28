@@ -287,6 +287,30 @@ else
     ok "Claude Code installed"
 fi
 
+# --- Share gh auth from Windows via symlink ---
+
+step "Sharing GitHub CLI auth from Windows"
+WIN_USER=$(cmd.exe /C "echo %USERNAME%" 2>/dev/null | tr -d '\r')
+WIN_GH_DIR="/mnt/c/Users/$WIN_USER/AppData/Roaming/GitHub CLI"
+
+if [ -d "$WIN_GH_DIR" ]; then
+    if [ -L "$HOME/.config/gh" ]; then
+        skip "gh config already symlinked"
+    else
+        mkdir -p "$HOME/.config"
+        rm -rf "$HOME/.config/gh" 2>/dev/null
+        ln -sf "$WIN_GH_DIR" "$HOME/.config/gh"
+        ok "gh auth shared from Windows (symlink)"
+    fi
+    if command_exists gh && gh auth status &>/dev/null; then
+        ok "gh authenticated in WSL"
+    else
+        warn "gh symlink created but auth not detected — run 'gh auth login' in WSL if needed"
+    fi
+else
+    warn "Windows gh config not found at $WIN_GH_DIR — run 'gh auth login' in Windows first"
+fi
+
 # --- Start services ---
 
 step "Starting services"
