@@ -238,7 +238,8 @@ $explorerAdvanced = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Ad
 $explorerCabinetState = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\CabinetState"
 
 # File extensions visible
-if ((Get-ItemProperty -Path $explorerAdvanced -Name "HideFileExt" -ErrorAction SilentlyContinue).HideFileExt -eq 0) {
+$val = (Get-ItemProperty -Path $explorerAdvanced -ErrorAction SilentlyContinue)
+if ($null -ne $val -and $val.PSObject.Properties["HideFileExt"] -and $val.HideFileExt -eq 0) {
     Write-Skip "File extensions already visible"
 } else {
     Set-ItemProperty -Path $explorerAdvanced -Name "HideFileExt" -Value 0
@@ -246,7 +247,7 @@ if ((Get-ItemProperty -Path $explorerAdvanced -Name "HideFileExt" -ErrorAction S
 }
 
 # Hidden files/folders visible (.git, .env, .vscode)
-if ((Get-ItemProperty -Path $explorerAdvanced -Name "Hidden" -ErrorAction SilentlyContinue).Hidden -eq 1) {
+if ($null -ne $val -and $val.PSObject.Properties["Hidden"] -and $val.Hidden -eq 1) {
     Write-Skip "Hidden items already visible"
 } else {
     Set-ItemProperty -Path $explorerAdvanced -Name "Hidden" -Value 1
@@ -255,7 +256,8 @@ if ((Get-ItemProperty -Path $explorerAdvanced -Name "Hidden" -ErrorAction Silent
 
 # Full path in Explorer title bar
 if (-not (Test-Path $explorerCabinetState)) { New-Item -Path $explorerCabinetState -Force | Out-Null }
-if ((Get-ItemProperty -Path $explorerCabinetState -Name "FullPathAddress" -ErrorAction SilentlyContinue).FullPathAddress -eq 1) {
+$cabVal = (Get-ItemProperty -Path $explorerCabinetState -ErrorAction SilentlyContinue)
+if ($null -ne $cabVal -and $cabVal.PSObject.Properties["FullPathAddress"] -and $cabVal.FullPathAddress -eq 1) {
     Write-Skip "Full path in title bar already enabled"
 } else {
     Set-ItemProperty -Path $explorerCabinetState -Name "FullPathAddress" -Value 1
@@ -263,7 +265,7 @@ if ((Get-ItemProperty -Path $explorerCabinetState -Name "FullPathAddress" -Error
 }
 
 # Open Explorer to "This PC" instead of Home
-if ((Get-ItemProperty -Path $explorerAdvanced -Name "LaunchTo" -ErrorAction SilentlyContinue).LaunchTo -eq 1) {
+if ($null -ne $val -and $val.PSObject.Properties["LaunchTo"] -and $val.LaunchTo -eq 1) {
     Write-Skip "Explorer already opens to This PC"
 } else {
     Set-ItemProperty -Path $explorerAdvanced -Name "LaunchTo" -Value 1
@@ -271,8 +273,8 @@ if ((Get-ItemProperty -Path $explorerAdvanced -Name "LaunchTo" -ErrorAction Sile
 }
 
 # Developer Mode (symlinks without admin)
-$devMode = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -ErrorAction SilentlyContinue
-if ($null -ne $devMode -and $devMode.AllowDevelopmentWithoutDevLicense -eq 1) {
+$devMode = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -ErrorAction SilentlyContinue
+if ($null -ne $devMode -and $devMode.PSObject.Properties["AllowDevelopmentWithoutDevLicense"] -and $devMode.AllowDevelopmentWithoutDevLicense -eq 1) {
     Write-Skip "Developer Mode already enabled"
 } else {
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -Value 1
@@ -280,8 +282,8 @@ if ($null -ne $devMode -and $devMode.AllowDevelopmentWithoutDevLicense -eq 1) {
 }
 
 # Long Paths enabled (prevents 260-char path limit errors in node_modules/Java)
-$longPaths = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -ErrorAction SilentlyContinue
-if ($null -ne $longPaths -and $longPaths.LongPathsEnabled -eq 1) {
+$longPaths = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -ErrorAction SilentlyContinue
+if ($null -ne $longPaths -and $longPaths.PSObject.Properties["LongPathsEnabled"] -and $longPaths.LongPathsEnabled -eq 1) {
     Write-Skip "Long Paths already enabled"
 } else {
     Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1
