@@ -366,6 +366,29 @@ else {
         Write-Host "    Installing Ubuntu 24.04 ..." -ForegroundColor White
         wsl --install -d Ubuntu-24.04 --no-launch
         Write-OK "Ubuntu-24.04 queued for install"
+
+        # Check if reboot is needed (WSL not yet functional)
+        $wslReady = $null
+        try { $wslReady = Clean-WslOutput (wsl -d Ubuntu-24.04 -- echo "ok" 2>&1) } catch {}
+        if ($wslReady -ne "ok") {
+            Write-Warn "A reboot is required to finalize Ubuntu 24.04 installation."
+
+            $setupUrl = "https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1"
+            $resumeCmd = "Start-Process powershell -Verb RunAs -ArgumentList '-NoExit -Command irm $setupUrl | iex'"
+            Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupResume" -Value "powershell -WindowStyle Hidden -Command `"$resumeCmd`""
+            Write-OK "Setup will auto-resume after reboot"
+            Write-Host ""
+            Write-Host "    IMPORTANT: After reboot, a PowerShell admin prompt (UAC) will appear." -ForegroundColor Yellow
+            Write-Host "    Please click 'Yes' to continue the setup." -ForegroundColor Yellow
+            Write-Host ""
+            $rebootNow = Read-Host "    Reboot now? (Y/n)"
+            if ($rebootNow -ne "n" -and $rebootNow -ne "N") {
+                Restart-Computer -Force
+            }
+            else {
+                Write-Warn "Reboot manually when ready. Setup will resume automatically on next login."
+            }
+        }
     }
 }
 
