@@ -257,9 +257,13 @@ if ($null -eq $wslFeature -or $wslFeature.State -ne "Enabled") {
     Write-Host "    IMPORTANT: After reboot, a PowerShell admin prompt (UAC) will appear." -ForegroundColor Yellow
     Write-Host "    Please click 'Yes' to continue the setup." -ForegroundColor Yellow
     Write-Host ""
-    Write-Warn "Rebooting in 10 seconds... Press Ctrl+C to cancel."
-    Start-Sleep -Seconds 10
-    Restart-Computer -Force
+    $rebootNow = Read-Host "    Reboot now? (Y/n)"
+    if ($rebootNow -ne "n" -and $rebootNow -ne "N") {
+        Restart-Computer -Force
+    }
+    else {
+        Write-Warn "Reboot manually when ready. Setup will resume automatically on next login."
+    }
 }
 else {
     # WSL platform is enabled, check for Ubuntu distro
