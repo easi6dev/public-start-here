@@ -329,35 +329,17 @@ try {
     $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -ErrorAction SilentlyContinue
 } catch {}
 
+$needsReboot = $false
+
 if ($null -eq $wslFeature -or $wslFeature.State -ne "Enabled") {
     Write-Host "    WSL platform not found. Installing WSL ..." -ForegroundColor White
     wsl --install --no-distribution 2>&1 | Out-Null
     Write-OK "WSL platform installed"
-    Write-Warn "A reboot is required before installing Ubuntu 24.04."
-
-    # Register RunOnce to auto-resume setup after reboot (runs once, then deletes itself)
-    $setupUrl = "https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1"
-    $resumeCmd = "Start-Process powershell -Verb RunAs -ArgumentList '-NoExit -Command irm $setupUrl | iex'"
-    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupResume" -Value "powershell -WindowStyle Hidden -Command `"$resumeCmd`""
-    Write-OK "Setup will auto-resume after reboot"
-    Write-Host ""
-    Write-Host "    IMPORTANT: After reboot, a PowerShell admin prompt (UAC) will appear." -ForegroundColor Yellow
-    Write-Host "    Please click 'Yes' to continue the setup." -ForegroundColor Yellow
-    Write-Host ""
-    $rebootNow = Read-Host "    Reboot now? (Y/n)"
-    if ($rebootNow -ne "n" -and $rebootNow -ne "N") {
-        Restart-Computer -Force
-    }
-    else {
-        Write-Warn "Reboot manually when ready. Setup will resume automatically on next login."
-    }
+    $needsReboot = $true
 }
 else {
-    # WSL platform is enabled, check for Ubuntu distro
     $wslInstalled = $null
-    try {
-        $wslInstalled = Clean-WslOutput (wsl --list --quiet 2>&1)
-    } catch {}
+    try { $wslInstalled = Clean-WslOutput (wsl --list --quiet 2>&1) } catch {}
 
     if ($wslInstalled -match "Ubuntu.?24\.04") {
         Write-Skip "Ubuntu 24.04 already installed on WSL"
@@ -366,29 +348,46 @@ else {
         Write-Host "    Installing Ubuntu 24.04 ..." -ForegroundColor White
         wsl --install -d Ubuntu-24.04 --no-launch
         Write-OK "Ubuntu-24.04 queued for install"
+    }
 
-        # Check if reboot is needed (WSL not yet functional)
-        $wslReady = $null
-        try { $wslReady = Clean-WslOutput (wsl -d Ubuntu-24.04 -- echo "ok" 2>&1) } catch {}
-        if ($wslReady -ne "ok") {
-            Write-Warn "A reboot is required to finalize Ubuntu 24.04 installation."
+    $wslReady = $null
+    try { $wslReady = Clean-WslOutput (wsl -d Ubuntu-24.04 -- echo "ok" 2>&1) } catch {}
+    if ($wslReady -ne "ok") {
+        $needsReboot = $true
+    }
+}
 
-            $setupUrl = "https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1"
-            $resumeCmd = "Start-Process powershell -Verb RunAs -ArgumentList '-NoExit -Command irm $setupUrl | iex'"
-            Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupResume" -Value "powershell -WindowStyle Hidden -Command `"$resumeCmd`""
-            Write-OK "Setup will auto-resume after reboot"
-            Write-Host ""
-            Write-Host "    IMPORTANT: After reboot, a PowerShell admin prompt (UAC) will appear." -ForegroundColor Yellow
-            Write-Host "    Please click 'Yes' to continue the setup." -ForegroundColor Yellow
-            Write-Host ""
-            $rebootNow = Read-Host "    Reboot now? (Y/n)"
-            if ($rebootNow -ne "n" -and $rebootNow -ne "N") {
-                Restart-Computer -Force
-            }
-            else {
-                Write-Warn "Reboot manually when ready. Setup will resume automatically on next login."
-            }
-        }
+if ($needsReboot) {
+    # Register RunOnce to auto-resume setup after reboot
+    $setupUrl = "https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1"
+    $resumeCmd = "Start-Process powershell -Verb RunAs -ArgumentList '-NoExit -Command irm $setupUrl | iex'"
+    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupResume" -Value "powershell -WindowStyle Hidden -Command `"$resumeCmd`""
+
+    Write-Host ""
+    Write-Host "    ============================================" -ForegroundColor Cyan
+    Write-Host "    Reboot required to continue setup" -ForegroundColor Cyan
+    Write-Host "    ============================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "    WSL needs a reboot to finish installing." -ForegroundColor White
+    Write-Host "    Don't worry - after reboot, this script will" -ForegroundColor White
+    Write-Host "    automatically pick up where it left off and" -ForegroundColor White
+    Write-Host "    install everything else for you:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "      - WSL Ubuntu 24.04 services (DB, Redis, RabbitMQ...)" -ForegroundColor Gray
+    Write-Host "      - CLI tools (gh, rg, fd, bat...)" -ForegroundColor Gray
+    Write-Host "      - GitHub auth + backend repo clone" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "    After reboot, a UAC prompt will pop up." -ForegroundColor Yellow
+    Write-Host "    Just click 'Yes' and grab a coffee." -ForegroundColor Yellow
+    Write-Host ""
+    $rebootNow = Read-Host "    Reboot now? (Y/n)"
+    if ($rebootNow -ne "n" -and $rebootNow -ne "N") {
+        Restart-Computer -Force
+    }
+    else {
+        Write-Host ""
+        Write-Warn "No worries! Reboot whenever you're ready."
+        Write-Warn "The setup will resume automatically on your next login."
     }
 }
 
