@@ -211,6 +211,18 @@ else {
     Write-OK "Claude Code installed"
 }
 
+# Flipper (mobile debugging, browser-based)
+Write-Step "Installing Flipper server"
+$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+$null = npm list -g flipper-server 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-Skip "flipper-server already installed"
+}
+else {
+    npm install -g flipper-server
+    Write-OK "flipper-server installed (run: npx flipper-server)"
+}
+
 # --- Git Config ---
 
 Write-Step "Configuring git defaults"
@@ -292,6 +304,8 @@ else {
     else {
         Write-Warn "Could not modify hosts file — add manually: 127.0.0.1 host.docker.internal"
     }
+    ipconfig /flushdns 2>&1 | Out-Null
+    Write-OK "DNS cache flushed"
 }
 
 # --- Credential reminders ---

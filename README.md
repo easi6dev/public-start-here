@@ -70,6 +70,7 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 - **Claude Code** — AI coding assistant CLI (native install)
 - **PowerShell 7** — Modern cross-platform PowerShell (faster than built-in 5.1)
 - **PowerToys** — Microsoft productivity tools (PowerToys Run, FancyZones, Color Picker, etc.)
+- **flipper-server** — Mobile debugging tool, browser-based (`npx flipper-server` to run)
 
 ### Windows — Developer Settings (auto-configured)
 
