@@ -299,11 +299,38 @@ if command_exists brew; then
 fi
 ok "All services started"
 
+# --- Health check ---
+
+step "Verifying services"
+
+check_service() {
+    local name="$1"
+    local svc="$2"
+    if sudo systemctl is-active --quiet "$svc" 2>/dev/null; then
+        ok "$name is running"
+    elif sudo service "$svc" status &>/dev/null; then
+        ok "$name is running"
+    else
+        warn "$name is NOT running — try: sudo service $svc start"
+    fi
+}
+
+check_service "PostgreSQL 16"  postgresql
+check_service "MongoDB 8.0"   mongod
+check_service "Redis"          redis-server
+check_service "RabbitMQ"       rabbitmq-server
+
+if pgrep -f activemq >/dev/null 2>&1; then
+    ok "ActiveMQ is running"
+else
+    warn "ActiveMQ is NOT running — try: brew services start activemq"
+fi
+
 # --- Done ---
 
 step "WSL setup complete!"
 echo ""
-echo "  Services running:"
+echo "  Service ports:"
 echo "    - PostgreSQL 16  (localhost:5432)"
 echo "    - MongoDB 8.0    (localhost:27017)"
 echo "    - Redis           (localhost:6379)"
