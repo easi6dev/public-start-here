@@ -211,11 +211,8 @@ Write-Step "Manual setup reminders"
 Write-Warn "Set these environment variables manually:"
 Write-Host "    - GITHUB_USERNAME" -ForegroundColor White
 Write-Host "    - GITHUB_TOKEN" -ForegroundColor White
-Write-Host "    - AWS_ACCESS_KEY" -ForegroundColor White
-Write-Host "    - aws_secret_access_key" -ForegroundColor White
 Write-Host "    - GOOGLE_APPLICATION_CREDENTIALS" -ForegroundColor White
 Write-Host ""
-Write-Warn "After setting credentials, run: aws configure"
 Write-Warn "Docker Desktop: Enable WSL integration with Ubuntu-24.04 in Settings > Resources > WSL Integration"
 
 # --- WSL 2 + Ubuntu 24.04 ---
