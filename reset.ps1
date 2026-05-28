@@ -244,9 +244,9 @@ else { Write-Skip "host.docker.internal not in hosts file" }
 # --- Remove RunOnce registry key (if pending) ---
 
 Write-Step "Removing RunOnce registry key"
-$runOnce = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupResume" -ErrorAction SilentlyContinue
+$runOnce = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupGuide" -ErrorAction SilentlyContinue
 if ($runOnce) {
-    Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupResume"
+    Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupGuide"
     Write-OK "RunOnce key removed"
 }
 else { Write-Skip "No RunOnce key found" }

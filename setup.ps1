@@ -366,10 +366,8 @@ else {
 }
 
 if ($needsReboot) {
-    # Register RunOnce to auto-resume setup after reboot
-    $setupUrl = "https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1"
-    $resumeCmd = "Start-Process powershell -Verb RunAs -ArgumentList '-NoExit -Command irm $setupUrl | iex'"
-    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupResume" -Value "powershell -WindowStyle Hidden -Command `"$resumeCmd`""
+    # Open project page after reboot so user can re-run the setup command
+    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupGuide" -Value "cmd /c start https://github.com/easi6dev/public-start-here"
 
     Write-Host ""
     Write-Host "    ============================================" -ForegroundColor Cyan
@@ -377,16 +375,16 @@ if ($needsReboot) {
     Write-Host "    ============================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "    WSL needs a reboot to finish installing." -ForegroundColor White
-    Write-Host "    Don't worry - after reboot, this script will" -ForegroundColor White
-    Write-Host "    automatically pick up where it left off and" -ForegroundColor White
-    Write-Host "    install everything else for you:" -ForegroundColor White
+    Write-Host "    After reboot, the setup guide will open in" -ForegroundColor White
+    Write-Host "    your browser automatically." -ForegroundColor White
     Write-Host ""
-    Write-Host "      - WSL Ubuntu 24.04 services (DB, Redis, RabbitMQ...)" -ForegroundColor Gray
-    Write-Host "      - CLI tools (gh, rg, fd, bat...)" -ForegroundColor Gray
-    Write-Host "      - GitHub auth + backend repo clone" -ForegroundColor Gray
+    Write-Host "    Then open PowerShell as Admin and run the" -ForegroundColor White
+    Write-Host "    same command again:" -ForegroundColor White
     Write-Host ""
-    Write-Host "    After reboot, a UAC prompt will pop up." -ForegroundColor Yellow
-    Write-Host "    Just click 'Yes' and grab a coffee." -ForegroundColor Yellow
+    Write-Host "    irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1 | iex" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "    Already-installed items will be skipped." -ForegroundColor Gray
+    Write-Host "    Only WSL services + repo cloning will run." -ForegroundColor Gray
     Write-Host ""
     $rebootNow = Read-Host "    Reboot now? (Y/n)"
     if ($rebootNow -ne "n" -and $rebootNow -ne "N") {
@@ -394,8 +392,8 @@ if ($needsReboot) {
     }
     else {
         Write-Host ""
-        Write-Warn "No worries! Reboot whenever you're ready."
-        Write-Warn "The setup will resume automatically on your next login."
+        Write-Warn "Reboot whenever you're ready."
+        Write-Warn "The setup guide will open automatically on next login."
     }
 }
 
