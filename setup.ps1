@@ -186,6 +186,15 @@ else {
     $claudeScript = Get-Content $claudeInstaller -Raw
     Invoke-Expression $claudeScript
     Remove-Item $claudeInstaller -Force -ErrorAction SilentlyContinue
+    # Add Claude Code to PATH if not already there
+    $claudeBinDir = Join-Path $env:USERPROFILE ".local\bin"
+    if (Test-Path $claudeBinDir) {
+        $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        if ($currentPath -notlike "*$claudeBinDir*") {
+            [Environment]::SetEnvironmentVariable("Path", "$currentPath;$claudeBinDir", "User")
+            Write-OK "Added $claudeBinDir to PATH"
+        }
+    }
     Write-OK "Claude Code installed"
 }
 
@@ -213,14 +222,25 @@ Write-Warn "Docker Desktop: Enable WSL integration with Ubuntu-24.04 in Settings
 
 Write-Step "Installing WSL 2 with Ubuntu 24.04"
 
-$wslInstalled = Clean-WslOutput (wsl --list --quiet 2>&1)
-if ($wslInstalled -match "Ubuntu.?24\.04") {
-    Write-Skip "Ubuntu 24.04 already installed on WSL"
+# Check if WSL platform is installed at all
+$wslCheck = Clean-WslOutput (wsl --version 2>&1)
+if ($wslCheck -notmatch "WSL") {
+    Write-Host "    WSL platform not found. Installing WSL ..." -ForegroundColor White
+    wsl --install --no-distribution
+    Write-OK "WSL platform installed"
+    Write-Warn "A reboot is required before installing Ubuntu 24.04."
+    Write-Warn "After rebooting, re-run this script to continue."
 }
 else {
-    Write-Host "    Installing WSL and Ubuntu 24.04 ..." -ForegroundColor White
-    wsl --install -d Ubuntu-24.04 --no-launch
-    Write-OK "Ubuntu-24.04 queued for install"
+    $wslInstalled = Clean-WslOutput (wsl --list --quiet 2>&1)
+    if ($wslInstalled -match "Ubuntu.?24\.04") {
+        Write-Skip "Ubuntu 24.04 already installed on WSL"
+    }
+    else {
+        Write-Host "    Installing Ubuntu 24.04 ..." -ForegroundColor White
+        wsl --install -d Ubuntu-24.04 --no-launch
+        Write-OK "Ubuntu-24.04 queued for install"
+    }
 }
 
 # --- .wslconfig ---
