@@ -68,6 +68,17 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 - **sd** — Intuitive find-and-replace tool (sed replacement)
 - **ktlint** — Kotlin code linter and formatter
 - **Claude Code** — AI coding assistant CLI (native install)
+- **PowerShell 7** — Modern cross-platform PowerShell (faster than built-in 5.1)
+- **PowerToys** — Microsoft productivity tools (PowerToys Run, FancyZones, Color Picker, etc.)
+
+### Windows — Developer Settings (auto-configured)
+
+- **File extensions visible** — Prevents `.wslconfig.txt` mistakes
+- **Hidden files visible** — Shows `.git`, `.env`, `.vscode` in Explorer
+- **Full path in title bar** — Shows absolute path in Explorer window
+- **Explorer opens to "This PC"** — Drives view instead of recent files
+- **Developer Mode enabled** — Create symlinks without admin privileges
+- **Long Paths enabled** — Removes 260-char path limit (node_modules, Java)
 
 ### WSL Ubuntu 24.04 — Services
 

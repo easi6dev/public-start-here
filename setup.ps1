@@ -83,10 +83,12 @@ $guiApps = @(
     @{ Id = "Postman.Postman";                  Name = "Postman" },
     @{ Id = "MongoDB.Compass.Full";              Name = "MongoDB Compass" },
     @{ Id = "Google.AndroidStudio";              Name = "Android Studio" },
-    @{ Id = "AgileBits.1Password";               Name = "1Password" }
+    @{ Id = "AgileBits.1Password";               Name = "1Password" },
+    @{ Id = "Microsoft.PowerToys";               Name = "PowerToys" }
 )
 
 $cliApps = @(
+    @{ Id = "Microsoft.PowerShell";     Name = "PowerShell 7" },
     @{ Id = "Git.Git";                  Name = "Git" },
     @{ Id = "OpenJS.NodeJS.LTS";        Name = "Node.js LTS" },
     @{ Id = "Microsoft.OpenJDK.21";     Name = "OpenJDK 21" },
@@ -205,16 +207,62 @@ git config --global core.autocrlf input
 git config --global core.eol lf
 Write-OK "core.autocrlf=input, core.eol=lf"
 
-# --- Show file extensions in Explorer (prevents .wslconfig.txt mistakes) ---
+# --- Windows developer-friendly settings ---
 
-Write-Step "Enabling file extension visibility in Explorer"
-$hideExt = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -ErrorAction SilentlyContinue
-if ($null -ne $hideExt -and $hideExt.HideFileExt -eq 0) {
+Write-Step "Configuring Windows developer settings"
+
+$explorerAdvanced = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+$explorerCabinetState = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\CabinetState"
+
+# File extensions visible
+if ((Get-ItemProperty -Path $explorerAdvanced -Name "HideFileExt" -ErrorAction SilentlyContinue).HideFileExt -eq 0) {
     Write-Skip "File extensions already visible"
+} else {
+    Set-ItemProperty -Path $explorerAdvanced -Name "HideFileExt" -Value 0
+    Write-OK "File extensions now visible"
 }
-else {
-    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 0
-    Write-OK "File extensions now visible in Explorer"
+
+# Hidden files/folders visible (.git, .env, .vscode)
+if ((Get-ItemProperty -Path $explorerAdvanced -Name "Hidden" -ErrorAction SilentlyContinue).Hidden -eq 1) {
+    Write-Skip "Hidden items already visible"
+} else {
+    Set-ItemProperty -Path $explorerAdvanced -Name "Hidden" -Value 1
+    Write-OK "Hidden items now visible"
+}
+
+# Full path in Explorer title bar
+if (-not (Test-Path $explorerCabinetState)) { New-Item -Path $explorerCabinetState -Force | Out-Null }
+if ((Get-ItemProperty -Path $explorerCabinetState -Name "FullPathAddress" -ErrorAction SilentlyContinue).FullPathAddress -eq 1) {
+    Write-Skip "Full path in title bar already enabled"
+} else {
+    Set-ItemProperty -Path $explorerCabinetState -Name "FullPathAddress" -Value 1
+    Write-OK "Full path in Explorer title bar enabled"
+}
+
+# Open Explorer to "This PC" instead of Home
+if ((Get-ItemProperty -Path $explorerAdvanced -Name "LaunchTo" -ErrorAction SilentlyContinue).LaunchTo -eq 1) {
+    Write-Skip "Explorer already opens to This PC"
+} else {
+    Set-ItemProperty -Path $explorerAdvanced -Name "LaunchTo" -Value 1
+    Write-OK "Explorer now opens to This PC"
+}
+
+# Developer Mode (symlinks without admin)
+$devMode = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -ErrorAction SilentlyContinue
+if ($null -ne $devMode -and $devMode.AllowDevelopmentWithoutDevLicense -eq 1) {
+    Write-Skip "Developer Mode already enabled"
+} else {
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -Value 1
+    Write-OK "Developer Mode enabled (symlinks without admin)"
+}
+
+# Long Paths enabled (prevents 260-char path limit errors in node_modules/Java)
+$longPaths = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -ErrorAction SilentlyContinue
+if ($null -ne $longPaths -and $longPaths.LongPathsEnabled -eq 1) {
+    Write-Skip "Long Paths already enabled"
+} else {
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1
+    Write-OK "Long Paths enabled (no 260-char limit)"
 }
 
 # --- hosts file (host.docker.internal) ---

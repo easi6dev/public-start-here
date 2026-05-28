@@ -84,6 +84,8 @@ $allApps = @(
     @{ Id = "MongoDB.Compass.Full";              Name = "MongoDB Compass" },
     @{ Id = "Google.AndroidStudio";              Name = "Android Studio" },
     @{ Id = "AgileBits.1Password";               Name = "1Password" },
+    @{ Id = "Microsoft.PowerToys";               Name = "PowerToys" },
+    @{ Id = "Microsoft.PowerShell";              Name = "PowerShell 7" },
     @{ Id = "Git.Git";                          Name = "Git" },
     @{ Id = "OpenJS.NodeJS.LTS";                Name = "Node.js LTS" },
     @{ Id = "Microsoft.OpenJDK.21";             Name = "OpenJDK 21" },
@@ -188,11 +190,25 @@ if ($null -ne $gac) {
 }
 else { Write-Skip "GOOGLE_APPLICATION_CREDENTIALS not set" }
 
-# --- Restore hidden file extensions (Windows default) ---
+# --- Restore Windows settings to defaults ---
 
-Write-Step "Restoring hidden file extensions"
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 1
-Write-OK "File extensions hidden (Windows default restored)"
+Write-Step "Restoring Windows Explorer and system settings"
+$explorerAdvanced = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+$explorerCabinetState = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\CabinetState"
+
+Set-ItemProperty -Path $explorerAdvanced -Name "HideFileExt" -Value 1
+Set-ItemProperty -Path $explorerAdvanced -Name "Hidden" -Value 2
+if (Test-Path $explorerCabinetState) {
+    Set-ItemProperty -Path $explorerCabinetState -Name "FullPathAddress" -Value 0
+}
+Set-ItemProperty -Path $explorerAdvanced -Name "LaunchTo" -Value 2
+Write-OK "Explorer settings restored to Windows defaults"
+
+Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -Value 0 -ErrorAction SilentlyContinue
+Write-OK "Developer Mode disabled"
+
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 0 -ErrorAction SilentlyContinue
+Write-OK "Long Paths disabled (Windows default)"
 
 # --- Remove git config ---
 
