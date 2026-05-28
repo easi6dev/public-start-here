@@ -124,11 +124,16 @@ if (Test-Path $ktlintDir) {
 }
 else { Write-Skip "ktlint not found" }
 
-# Clean PATH entries
+# Clean PATH entries (sd, ktlint, Claude Code)
+$claudeBinDir = Join-Path $env:USERPROFILE ".local\bin"
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-$cleanedPath = ($userPath -split ";" | Where-Object { $_ -notlike "*$env:LOCALAPPDATA\sd*" -and $_ -notlike "*$env:LOCALAPPDATA\ktlint*" }) -join ";"
+$cleanedPath = ($userPath -split ";" | Where-Object {
+    $_ -notlike "*$env:LOCALAPPDATA\sd*" -and
+    $_ -notlike "*$env:LOCALAPPDATA\ktlint*" -and
+    $_ -notlike "*$claudeBinDir*"
+}) -join ";"
 [Environment]::SetEnvironmentVariable("Path", $cleanedPath, "User")
-Write-OK "PATH cleaned (removed sd/ktlint entries)"
+Write-OK "PATH cleaned (removed sd/ktlint/claude entries)"
 
 # --- Remove Claude Code ---
 
@@ -174,6 +179,15 @@ foreach ($var in $portVars) {
     else { Write-Skip "$var not set" }
 }
 
+# --- Remove GOOGLE_APPLICATION_CREDENTIALS ---
+
+$gac = [Environment]::GetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", "User")
+if ($null -ne $gac) {
+    [Environment]::SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", $null, "User")
+    Write-OK "Removed GOOGLE_APPLICATION_CREDENTIALS"
+}
+else { Write-Skip "GOOGLE_APPLICATION_CREDENTIALS not set" }
+
 # --- Remove git config ---
 
 Write-Step "Removing git global config"
@@ -183,6 +197,33 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
     Write-OK "git config (autocrlf, eol) removed"
 }
 else { Write-Skip "git not installed" }
+
+# --- Remove host.docker.internal from hosts file ---
+
+Write-Step "Removing host.docker.internal from hosts file"
+$hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
+$hostsContent = Get-Content $hostsFile -ErrorAction SilentlyContinue
+if ($hostsContent -match "host\.docker\.internal") {
+    $newHosts = $hostsContent | Where-Object { $_ -notmatch "host\.docker\.internal" }
+    Set-Content -Path $hostsFile -Value $newHosts -ErrorAction SilentlyContinue
+    if ($?) {
+        Write-OK "host.docker.internal removed from hosts file"
+    }
+    else {
+        Write-Warn "Could not modify hosts file — remove manually"
+    }
+}
+else { Write-Skip "host.docker.internal not in hosts file" }
+
+# --- Remove RunOnce registry key (if pending) ---
+
+Write-Step "Removing RunOnce registry key"
+$runOnce = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupResume" -ErrorAction SilentlyContinue
+if ($runOnce) {
+    Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupResume"
+    Write-OK "RunOnce key removed"
+}
+else { Write-Skip "No RunOnce key found" }
 
 # --- Remove .wslconfig ---
 
