@@ -1,26 +1,55 @@
-# public-start-here
+# TADA Windows Setup
 
 Windows PC setup automation for TADA backend developers.
 
-## Quick Start
+---
 
-### Opening PowerShell as Administrator
+## 👉 Which step are you on?
 
-- **Fastest**: Press `Win + X` → click **Terminal (Admin)**
-- **Search**: Press `Win` → type `powershell` → click **Run as Administrator**
-- **Start menu**: Right-click Windows Terminal → **Run as Administrator**
+### 🟢 [First time? Start here](#first-time-setup) — Fresh Windows PC, never ran this script before
 
-Then run:
+### 🔄 [Just rebooted? Continue here](#after-reboot) — Already ran the script, rebooted, now what?
+
+---
+
+## First time setup
+
+1. Open **PowerShell as Administrator**
+   - **Fastest**: `Win + X` → **Terminal (Admin)**
+   - **Or**: `Win` key → type `powershell` → click **Run as Administrator**
+
+2. Paste this and press Enter:
 
 ```powershell
 irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1 | iex
 ```
 
-This will automatically:
+3. The script will install everything automatically. When it's done, it will ask you to **reboot**.
+4. After reboot, this page will open in your browser. Go to [After reboot](#after-reboot) below.
 
-1. **Phase 1** — Install Windows apps and CLI tools via winget
-2. **Phase 2** — Install WSL Ubuntu 24.04 and set up services
-3. **Phase 3** — Authenticate with GitHub and clone all backend repositories to `~/backend/`
+---
+
+## After reboot
+
+The hard part is done! All your apps and tools are already installed. Now we just need to finish WSL setup.
+
+1. Open **PowerShell as Administrator** again
+   - `Win + X` → **Terminal (Admin)**
+
+2. Paste the **same command** again:
+
+```powershell
+irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1 | iex
+```
+
+3. Don't worry — everything already installed will be **skipped automatically**. Only these remain:
+   - WSL Ubuntu 24.04 services (PostgreSQL, MongoDB, Redis, RabbitMQ, ActiveMQ)
+   - CLI tools in WSL (gh, rg, fd, bat, etc.)
+   - GitHub authentication + backend repo cloning
+
+4. Grab a coffee and wait for it to finish.
+
+---
 
 ## Reset
 
@@ -29,6 +58,8 @@ To undo everything and start fresh:
 ```powershell
 irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 | iex
 ```
+
+---
 
 ## What gets installed
 
@@ -48,9 +79,11 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 - **Android Studio** — IDE for Android app development and emulator
 - **1Password** — Password manager
 - **Cloudflare WARP** — VPN client (team configuration required separately)
+- **PowerToys** — Microsoft productivity tools (PowerToys Run, FancyZones, Color Picker, etc.)
 
 ### Windows — CLI Tools
 
+- **PowerShell 7** — Modern cross-platform PowerShell (faster than built-in 5.1)
 - **Git** — Version control
 - **Node.js LTS** — JavaScript runtime, required for Claude Code and frontend tools
 - **OpenJDK 21** — Java runtime for Kotlin/Spring Boot projects
@@ -69,8 +102,6 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 - **sd** — Intuitive find-and-replace tool (sed replacement)
 - **ktlint** — Kotlin code linter and formatter
 - **Claude Code** — AI coding assistant CLI (native install)
-- **PowerShell 7** — Modern cross-platform PowerShell (faster than built-in 5.1)
-- **PowerToys** — Microsoft productivity tools (PowerToys Run, FancyZones, Color Picker, etc.)
 - **flipper-server** — Mobile debugging tool, browser-based (`npx flipper-server` to run)
 
 ### Windows — Developer Settings (auto-configured)
@@ -81,6 +112,7 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 - **Explorer opens to "This PC"** — Drives view instead of recent files
 - **Developer Mode enabled** — Create symlinks without admin privileges
 - **Long Paths enabled** — Removes 260-char path limit (node_modules, Java)
+- **ExecutionPolicy RemoteSigned** — Allows running local dev scripts (nvm, venv, etc.)
 
 ### WSL Ubuntu 24.04 — Services
 
@@ -106,6 +138,6 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 
 ## Manual steps after setup
 
-1. **Reboot** if this was your first WSL install, then re-run the script
-2. **Set credential environment variables** — `GITHUB_USERNAME`, `GITHUB_TOKEN`
-3. **Enable Docker Desktop WSL integration** — Settings > Resources > WSL Integration > Ubuntu-24.04
+1. **Set credential environment variables** — `GITHUB_USERNAME`, `GITHUB_TOKEN`
+2. **Enable Docker Desktop WSL integration** — Settings > Resources > WSL Integration > Ubuntu-24.04
+3. **Configure Cloudflare WARP** — Follow the team VPN setup guide
