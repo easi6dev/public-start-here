@@ -17,6 +17,17 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     return
 }
 
+# --- ExecutionPolicy ---
+
+$currentPolicy = Get-ExecutionPolicy -Scope CurrentUser
+if ($currentPolicy -eq "RemoteSigned" -or $currentPolicy -eq "Unrestricted" -or $currentPolicy -eq "Bypass") {
+    Write-Host "    [SKIP] ExecutionPolicy already $currentPolicy" -ForegroundColor Yellow
+}
+else {
+    Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+    Write-Host "    [OK] ExecutionPolicy set to RemoteSigned" -ForegroundColor Green
+}
+
 # --- Helpers ---
 
 function Write-Step {

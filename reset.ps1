@@ -210,6 +210,9 @@ Write-OK "Developer Mode disabled"
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 0 -ErrorAction SilentlyContinue
 Write-OK "Long Paths disabled (Windows default)"
 
+Set-ExecutionPolicy Restricted -Scope CurrentUser -Force -ErrorAction SilentlyContinue
+Write-OK "ExecutionPolicy restored to Restricted"
+
 # --- Remove git config ---
 
 Write-Step "Removing git global config"
