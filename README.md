@@ -18,8 +18,8 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1 
 
 This will automatically:
 
-1. **Phase 1** — Install Windows apps (IntelliJ, Docker Desktop, Chrome, Slack, etc.) and CLI tools via winget
-2. **Phase 2** — Install WSL Ubuntu 24.04 and set up services (PostgreSQL, MongoDB, Redis, RabbitMQ, ActiveMQ)
+1. **Phase 1** — Install Windows apps and CLI tools via winget
+2. **Phase 2** — Install WSL Ubuntu 24.04 and set up services
 3. **Phase 3** — Authenticate with GitHub and clone all backend repositories to `~/backend/`
 
 ## Reset
@@ -32,31 +32,60 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 
 ## What gets installed
 
-### Windows (winget)
+### Windows — GUI Apps
 
-| GUI Apps | CLI Tools |
-|----------|-----------|
-| IntelliJ IDEA Ultimate | Git |
-| DataGrip | Node.js LTS |
-| JetBrains Toolbox | OpenJDK 21 |
-| Fork | GitHub CLI |
-| Docker Desktop | jq |
-| Claude | AWS CLI |
-| Slack | Python 3.12 |
-| Figma | uv |
-| Google Chrome | ripgrep, fd, fzf, bat |
-| Postman | zoxide, delta, eza, sd |
-| MongoDB Compass | ktlint |
-| Android Studio | Claude Code |
-| 1Password | |
+- **IntelliJ IDEA Ultimate** — Primary IDE for Kotlin/Spring backend development
+- **DataGrip** — Database IDE for querying PostgreSQL, MongoDB, Redis
+- **JetBrains Toolbox** — Manages JetBrains IDE installations and updates
+- **Fork** — Git GUI client for visual branch management and diffs
+- **Docker Desktop** — Container runtime, uses WSL 2 backend on Windows
+- **Claude** — AI assistant desktop app
+- **Slack** — Team communication
+- **Figma** — UI/UX design collaboration tool
+- **Google Chrome** — Web browser for development and testing
+- **Postman** — API testing and debugging tool
+- **MongoDB Compass** — GUI for browsing and querying MongoDB databases
+- **Android Studio** — IDE for Android app development and emulator
+- **1Password** — Password manager
 
-### WSL Ubuntu 24.04 (services)
+### Windows — CLI Tools
 
-PostgreSQL 16, MongoDB 8.0, Redis, RabbitMQ (+ delayed message exchange), ActiveMQ
+- **Git** — Version control
+- **Node.js LTS** — JavaScript runtime, required for Claude Code and frontend tools
+- **OpenJDK 21** — Java runtime for Kotlin/Spring Boot projects
+- **GitHub CLI (gh)** — GitHub operations from the terminal (auth, PRs, repo management)
+- **jq** — JSON processor for parsing API responses in scripts
+- **AWS CLI** — AWS service management (S3, ECR, ECS, etc.)
+- **Python 3.12** — Python runtime for scripting and tooling
+- **uv** — Ultra-fast Python package manager (pip/venv replacement)
+- **ripgrep (rg)** — Fast text search across files (grep replacement)
+- **fd** — Fast file finder (find replacement)
+- **fzf** — Fuzzy finder for interactive file/history search
+- **bat** — File viewer with syntax highlighting (cat replacement)
+- **zoxide** — Smart directory jumper that learns your habits (cd replacement)
+- **delta** — Syntax-highlighted git diff viewer
+- **eza** — Modern file lister with colors and git status (ls replacement)
+- **sd** — Intuitive find-and-replace tool (sed replacement)
+- **ktlint** — Kotlin code linter and formatter
+- **Claude Code** — AI coding assistant CLI (native install)
 
-### WSL Ubuntu 24.04 (CLI tools via brew)
+### WSL Ubuntu 24.04 — Services
 
-gh, node, python3, uv, ktlint, ripgrep, fd, fzf, bat, zoxide, git-delta, eza, sd
+- **PostgreSQL 16** — Primary relational database, with PostGIS extension
+- **MongoDB 8.0** — Document database for flexible schema storage
+- **Redis** — In-memory cache and message broker
+- **RabbitMQ** — Message queue with delayed message exchange plugin and management UI
+- **ActiveMQ** — Message broker for legacy service communication (installed via brew)
+
+### WSL Ubuntu 24.04 — CLI Tools (via brew)
+
+- **gh** — GitHub CLI
+- **node** — Node.js runtime
+- **python3** — Python runtime
+- **uv** — Python package manager
+- **ktlint** — Kotlin linter
+- **ripgrep, fd, fzf, bat** — Fast search and file tools
+- **zoxide, git-delta, eza, sd** — Terminal productivity tools
 
 ## Manual steps after setup
 
