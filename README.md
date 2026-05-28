@@ -94,5 +94,5 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 ## Manual steps after setup
 
 1. **Reboot** if this was your first WSL install, then re-run the script
-2. **Set credential environment variables** — `GITHUB_USERNAME`, `GITHUB_TOKEN`, `GOOGLE_APPLICATION_CREDENTIALS`
+2. **Set credential environment variables** — `GITHUB_USERNAME`, `GITHUB_TOKEN`
 3. **Enable Docker Desktop WSL integration** — Settings > Resources > WSL Integration > Ubuntu-24.04

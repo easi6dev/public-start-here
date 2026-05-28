@@ -211,7 +211,6 @@ Write-Step "Manual setup reminders"
 Write-Warn "Set these environment variables manually:"
 Write-Host "    - GITHUB_USERNAME" -ForegroundColor White
 Write-Host "    - GITHUB_TOKEN" -ForegroundColor White
-Write-Host "    - GOOGLE_APPLICATION_CREDENTIALS" -ForegroundColor White
 Write-Host ""
 Write-Warn "Docker Desktop: Enable WSL integration with Ubuntu-24.04 in Settings > Resources > WSL Integration"
 
