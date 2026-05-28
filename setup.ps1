@@ -102,7 +102,8 @@ $guiApps = @(
     @{ Id = "MongoDB.Compass.Full";              Name = "MongoDB Compass" },
     @{ Id = "Google.AndroidStudio";              Name = "Android Studio" },
     @{ Id = "AgileBits.1Password";               Name = "1Password" },
-    @{ Id = "Microsoft.PowerToys";               Name = "PowerToys" }
+    @{ Id = "Microsoft.PowerToys";               Name = "PowerToys" },
+    @{ Id = "Cloudflare.Warp";                   Name = "Cloudflare WARP" }
 )
 
 $cliApps = @(

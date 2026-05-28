@@ -47,6 +47,7 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 - **MongoDB Compass** — GUI for browsing and querying MongoDB databases
 - **Android Studio** — IDE for Android app development and emulator
 - **1Password** — Password manager
+- **Cloudflare WARP** — VPN client (team configuration required separately)
 
 ### Windows — CLI Tools
 

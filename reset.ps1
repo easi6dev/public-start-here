@@ -85,6 +85,7 @@ $allApps = @(
     @{ Id = "Google.AndroidStudio";              Name = "Android Studio" },
     @{ Id = "AgileBits.1Password";               Name = "1Password" },
     @{ Id = "Microsoft.PowerToys";               Name = "PowerToys" },
+    @{ Id = "Cloudflare.Warp";                   Name = "Cloudflare WARP" },
     @{ Id = "Microsoft.PowerShell";              Name = "PowerShell 7" },
     @{ Id = "Git.Git";                          Name = "Git" },
     @{ Id = "OpenJS.NodeJS.LTS";                Name = "Node.js LTS" },
