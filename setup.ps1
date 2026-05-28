@@ -218,17 +218,26 @@ Write-Warn "Docker Desktop: Enable WSL integration with Ubuntu-24.04 in Settings
 
 Write-Step "Installing WSL 2 with Ubuntu 24.04"
 
-# Check if WSL platform is installed at all
-$wslCheck = Clean-WslOutput (wsl --version 2>&1)
-if ($wslCheck -notmatch "WSL") {
+# Check if WSL platform is installed via Windows feature (avoids wsl.exe garbled errors)
+$wslFeature = $null
+try {
+    $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -ErrorAction SilentlyContinue
+} catch {}
+
+if ($null -eq $wslFeature -or $wslFeature.State -ne "Enabled") {
     Write-Host "    WSL platform not found. Installing WSL ..." -ForegroundColor White
-    wsl --install --no-distribution
+    wsl --install --no-distribution 2>&1 | Out-Null
     Write-OK "WSL platform installed"
     Write-Warn "A reboot is required before installing Ubuntu 24.04."
     Write-Warn "After rebooting, re-run this script to continue."
 }
 else {
-    $wslInstalled = Clean-WslOutput (wsl --list --quiet 2>&1)
+    # WSL platform is enabled, check for Ubuntu distro
+    $wslInstalled = $null
+    try {
+        $wslInstalled = Clean-WslOutput (wsl --list --quiet 2>&1)
+    } catch {}
+
     if ($wslInstalled -match "Ubuntu.?24\.04") {
         Write-Skip "Ubuntu 24.04 already installed on WSL"
     }
