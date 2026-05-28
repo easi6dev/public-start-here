@@ -437,7 +437,9 @@ else {
     Invoke-WebRequest -Uri $setupWslUrl -OutFile $setupWslPath -UseBasicParsing
 
     Write-Host "    Running setup-wsl.sh inside WSL ..." -ForegroundColor White
-    $wslScriptPath = (Clean-WslOutput (wsl -d Ubuntu-24.04 -- wslpath -u "$setupWslPath"))
+    # Convert Windows path to WSL path directly (wslpath loses backslashes)
+    $driveLetter = $setupWslPath.Substring(0, 1).ToLower()
+    $wslScriptPath = "/mnt/$driveLetter" + $setupWslPath.Substring(2).Replace('\', '/')
     wsl -d Ubuntu-24.04 -- bash "$wslScriptPath"
 
     # --- Phase 3: GitHub Auth + Clone Backend Repos ---
