@@ -205,6 +205,24 @@ git config --global core.autocrlf input
 git config --global core.eol lf
 Write-OK "core.autocrlf=input, core.eol=lf"
 
+# --- hosts file (host.docker.internal) ---
+
+Write-Step "Configuring hosts file"
+$hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
+$hostsContent = Get-Content $hostsFile -Raw -ErrorAction SilentlyContinue
+if ($hostsContent -match "host\.docker\.internal") {
+    Write-Skip "host.docker.internal already in hosts file"
+}
+else {
+    Add-Content -Path $hostsFile -Value "`n127.0.0.1 host.docker.internal" -ErrorAction SilentlyContinue
+    if ($?) {
+        Write-OK "Added 127.0.0.1 host.docker.internal to hosts file"
+    }
+    else {
+        Write-Warn "Could not modify hosts file — add manually: 127.0.0.1 host.docker.internal"
+    }
+}
+
 # --- Credential reminders ---
 
 Write-Step "Manual setup reminders"
@@ -263,6 +281,7 @@ else {
 [wsl2]
 processors = $processors
 memory = $memory
+networkingMode=mirrored
 "@
     Set-Content -Path $wslConfigPath -Value $wslConfigContent
     Write-OK ".wslconfig created with defaults (processors=$processors, memory=$memory)"

@@ -83,7 +83,7 @@ sudo apt install -y \
 # Services + utilities
 sudo apt install -y --fix-missing \
     mongodb-org rabbitmq-server postgresql-16 postgresql-16-postgis-3 redis-server \
-    unzip jq git openjdk-21-jdk
+    unzip jq git openjdk-21-jdk build-essential
 
 ok "APT packages installed"
 
