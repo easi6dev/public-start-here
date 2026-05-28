@@ -252,9 +252,13 @@ if ($null -eq $wslFeature -or $wslFeature.State -ne "Enabled") {
     $setupUrl = "https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1"
     $resumeCmd = "Start-Process powershell -Verb RunAs -ArgumentList '-NoExit -Command irm $setupUrl | iex'"
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupResume" -Value "powershell -WindowStyle Hidden -Command `"$resumeCmd`""
-    Write-OK "Setup will auto-resume after reboot (UAC prompt will appear)"
-    Write-Warn "Rebooting in 30 seconds... Press Ctrl+C to cancel."
-    Start-Sleep -Seconds 30
+    Write-OK "Setup will auto-resume after reboot"
+    Write-Host ""
+    Write-Host "    IMPORTANT: After reboot, a PowerShell admin prompt (UAC) will appear." -ForegroundColor Yellow
+    Write-Host "    Please click 'Yes' to continue the setup." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Warn "Rebooting in 10 seconds... Press Ctrl+C to cancel."
+    Start-Sleep -Seconds 10
     Restart-Computer -Force
 }
 else {
