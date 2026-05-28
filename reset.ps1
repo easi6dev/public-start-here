@@ -81,7 +81,6 @@ $allApps = @(
     @{ Id = "Figma.Figma";                      Name = "Figma" },
     @{ Id = "Google.Chrome";                    Name = "Google Chrome" },
     @{ Id = "Postman.Postman";                  Name = "Postman" },
-    @{ Id = "Notion.Notion";                    Name = "Notion" },
     @{ Id = "MongoDB.Compass.Full";              Name = "MongoDB Compass" },
     @{ Id = "Google.AndroidStudio";              Name = "Android Studio" },
     @{ Id = "AgileBits.1Password";               Name = "1Password" },

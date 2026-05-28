@@ -46,9 +46,8 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 | Figma | uv |
 | Google Chrome | ripgrep, fd, fzf, bat |
 | Postman | zoxide, delta, eza, sd |
-| Notion | ktlint |
-| MongoDB Compass | Claude Code |
-| Android Studio | |
+| MongoDB Compass | ktlint |
+| Android Studio | Claude Code |
 | 1Password | |
 
 ### WSL Ubuntu 24.04 (services)
