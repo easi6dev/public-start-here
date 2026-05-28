@@ -188,6 +188,12 @@ if ($null -ne $gac) {
 }
 else { Write-Skip "GOOGLE_APPLICATION_CREDENTIALS not set" }
 
+# --- Restore hidden file extensions (Windows default) ---
+
+Write-Step "Restoring hidden file extensions"
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 1
+Write-OK "File extensions hidden (Windows default restored)"
+
 # --- Remove git config ---
 
 Write-Step "Removing git global config"

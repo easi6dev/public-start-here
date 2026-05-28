@@ -131,11 +131,36 @@ fi
 
 if [ -n "$RABBITMQ_PLUGIN_DIR" ] && [ -d "$RABBITMQ_PLUGIN_DIR" ]; then
     if ! ls "$RABBITMQ_PLUGIN_DIR"/rabbitmq_delayed_message_exchange-*.ez &>/dev/null; then
-        curl -sL -o /tmp/rabbitmq_delayed_message_exchange-4.0.2.ez \
-            https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases/download/v4.0.2/rabbitmq_delayed_message_exchange-4.0.2.ez
-        sudo cp /tmp/rabbitmq_delayed_message_exchange-4.0.2.ez "$RABBITMQ_PLUGIN_DIR/"
-        rm /tmp/rabbitmq_delayed_message_exchange-4.0.2.ez
-        ok "Delayed message exchange plugin installed"
+        RABBITMQ_VER=$(sudo rabbitmqctl version 2>/dev/null | head -1)
+        RABBITMQ_MINOR="${RABBITMQ_VER%.*}"
+        RABBITMQ_MAJOR="${RABBITMQ_VER%%.*}"
+
+        PLUGIN_VER=""
+        if command_exists jq; then
+            PLUGIN_VER=$(curl -sL "https://api.github.com/repos/rabbitmq/rabbitmq-delayed-message-exchange/releases" \
+                | jq -r --arg ver "$RABBITMQ_MINOR" \
+                    '[.[] | select(.tag_name | startswith("v" + $ver)) | .tag_name][0] // empty' \
+                | sed 's/^v//')
+            if [ -z "$PLUGIN_VER" ]; then
+                PLUGIN_VER=$(curl -sL "https://api.github.com/repos/rabbitmq/rabbitmq-delayed-message-exchange/releases" \
+                    | jq -r --arg ver "$RABBITMQ_MAJOR" \
+                        '[.[] | select(.tag_name | startswith("v" + $ver)) | .tag_name][0] // empty' \
+                    | sed 's/^v//')
+            fi
+        fi
+
+        if [ -z "$PLUGIN_VER" ]; then
+            PLUGIN_VER="4.0.2"
+            warn "Could not detect compatible plugin version, using fallback $PLUGIN_VER"
+        else
+            ok "Detected RabbitMQ $RABBITMQ_VER, using plugin $PLUGIN_VER"
+        fi
+
+        curl -sL -o "/tmp/rabbitmq_delayed_message_exchange-${PLUGIN_VER}.ez" \
+            "https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases/download/v${PLUGIN_VER}/rabbitmq_delayed_message_exchange-${PLUGIN_VER}.ez"
+        sudo cp "/tmp/rabbitmq_delayed_message_exchange-${PLUGIN_VER}.ez" "$RABBITMQ_PLUGIN_DIR/"
+        rm "/tmp/rabbitmq_delayed_message_exchange-${PLUGIN_VER}.ez"
+        ok "Delayed message exchange plugin $PLUGIN_VER installed"
     else
         skip "Delayed message exchange plugin already installed"
     fi

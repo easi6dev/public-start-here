@@ -205,6 +205,18 @@ git config --global core.autocrlf input
 git config --global core.eol lf
 Write-OK "core.autocrlf=input, core.eol=lf"
 
+# --- Show file extensions in Explorer (prevents .wslconfig.txt mistakes) ---
+
+Write-Step "Enabling file extension visibility in Explorer"
+$hideExt = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -ErrorAction SilentlyContinue
+if ($null -ne $hideExt -and $hideExt.HideFileExt -eq 0) {
+    Write-Skip "File extensions already visible"
+}
+else {
+    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 0
+    Write-OK "File extensions now visible in Explorer"
+}
+
 # --- hosts file (host.docker.internal) ---
 
 Write-Step "Configuring hosts file"
