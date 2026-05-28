@@ -17,6 +17,13 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     return
 }
 
+# --- Prevent sleep/screen off during setup ---
+
+try {
+    $sleepApi = Add-Type -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint esFlags);' -Name "SleepAPI" -PassThru
+    $sleepApi::SetThreadExecutionState(0x80000003) | Out-Null  # ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+} catch {}
+
 # --- ExecutionPolicy ---
 
 $currentPolicy = Get-ExecutionPolicy -Scope CurrentUser
