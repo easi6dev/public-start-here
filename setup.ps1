@@ -443,14 +443,17 @@ else {
     # Run as regular user (UID 1000), not root — brew rejects root
     $wslUser = $null
     try {
-        $rawUser = (wsl -d Ubuntu-24.04 -- awk "-F:" '{if($3==1000){print $1;exit}}' /etc/passwd 2>&1) -replace "`0",""
+        $rawUser = (wsl -d Ubuntu-24.04 -- id -un 1000 2>&1) -replace "`0",""
         $wslUser = ($rawUser | Out-String).Trim()
+        if ($wslUser -match "no such user") { $wslUser = $null }
     } catch {}
     if ($wslUser) {
+        Write-Host "    Running as WSL user: $wslUser" -ForegroundColor Gray
         wsl -d Ubuntu-24.04 -u $wslUser -- bash "$wslScriptPath"
     }
     else {
         Write-Warn "No regular WSL user found (UID 1000). Running as default user."
+        Write-Warn "Homebrew install may fail. Create a WSL user first: wsl -d Ubuntu-24.04 then run 'adduser <name>'"
         wsl -d Ubuntu-24.04 -- bash "$wslScriptPath"
     }
 
@@ -465,9 +468,11 @@ else {
         Write-Host "    Install gh and run clone-repos.ps1 manually later." -ForegroundColor White
     }
     else {
-        # Check auth by exit code, not text matching (more reliable)
-        $null = gh auth status 2>&1
-        if ($LASTEXITCODE -ne 0) {
+        # Check auth by exit code (wrap in try/catch — gh stderr becomes ErrorRecord)
+        $ghAuthed = $false
+        try { $null = gh auth status 2>&1; if ($LASTEXITCODE -eq 0) { $ghAuthed = $true } } catch {}
+
+        if (-not $ghAuthed) {
             Write-Host ""
             Write-Host "    ============================================" -ForegroundColor Cyan
             Write-Host "    GitHub Authentication" -ForegroundColor Cyan
@@ -481,8 +486,11 @@ else {
             $env:GH_PROMPT_DISABLED = ""
         }
 
-        $null = gh auth status 2>&1
-        if ($LASTEXITCODE -eq 0) {
+        # Re-check auth after login attempt
+        $ghAuthed = $false
+        try { $null = gh auth status 2>&1; if ($LASTEXITCODE -eq 0) { $ghAuthed = $true } } catch {}
+
+        if ($ghAuthed) {
             Write-OK "GitHub authenticated"
 
             Write-Host "    Downloading clone script from private repo ..." -ForegroundColor White
