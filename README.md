@@ -77,12 +77,16 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 - **RabbitMQ** — Message queue with delayed message exchange plugin and management UI
 - **ActiveMQ** — Message broker for legacy service communication (installed via brew)
 
+### WSL Ubuntu 24.04 — Runtime Version Managers
+
+- **nvm** — Node.js version manager (`nvm install 20`, `nvm use 18`)
+- **Node.js LTS** — Installed via nvm, easily switchable per project
+- **uv** — Python version and package manager (`uv python install 3.12`, `uv venv`)
+- **Python 3.12** — Installed via uv, no separate pyenv needed
+
 ### WSL Ubuntu 24.04 — CLI Tools (via brew)
 
 - **gh** — GitHub CLI
-- **node** — Node.js runtime
-- **python3** — Python runtime
-- **uv** — Python package manager
 - **ktlint** — Kotlin linter
 - **ripgrep, fd, fzf, bat** — Fast search and file tools
 - **zoxide, git-delta, eza, sd** — Terminal productivity tools

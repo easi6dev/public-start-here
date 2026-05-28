@@ -191,7 +191,7 @@ else
     step "Installing CLI tools via brew"
 
     BREW_PACKAGES=(
-        gh node python3 uv ktlint
+        gh uv ktlint
         ripgrep fd fzf bat zoxide git-delta eza sd
     )
 
@@ -214,6 +214,42 @@ else
         fi
     fi
 
+fi
+
+# --- nvm + Node.js ---
+
+step "Installing nvm and Node.js LTS"
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+    skip "nvm already installed"
+else
+    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+    ok "nvm installed"
+fi
+
+# Load nvm for current session
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+if command_exists node; then
+    skip "Node.js already installed ($(node --version))"
+else
+    nvm install --lts
+    nvm use --lts
+    ok "Node.js LTS installed ($(node --version))"
+fi
+
+# --- Python via uv ---
+
+step "Installing Python via uv"
+if command_exists brew && command_exists uv; then
+    if uv python list --only-installed 2>/dev/null | grep -q "3.12"; then
+        skip "Python 3.12 already installed via uv"
+    else
+        uv python install 3.12
+        ok "Python 3.12 installed via uv"
+    fi
+else
+    warn "uv not found — install Python manually"
 fi
 
 # --- Claude Code (native install) ---
