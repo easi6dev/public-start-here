@@ -183,6 +183,7 @@ else {
     Write-Host "    Installing Claude Code via native installer ..." -ForegroundColor White
     $claudeInstaller = "$env:TEMP\claude-install.ps1"
     Invoke-WebRequest -Uri "https://claude.ai/install.ps1" -OutFile $claudeInstaller -UseBasicParsing
+    Unblock-File -Path $claudeInstaller
     & $claudeInstaller
     Remove-Item $claudeInstaller -Force -ErrorAction SilentlyContinue
     Write-OK "Claude Code installed"
