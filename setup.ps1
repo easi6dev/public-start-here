@@ -468,10 +468,17 @@ else {
         # Check auth by exit code, not text matching (more reliable)
         $null = gh auth status 2>&1
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "    GitHub authentication required to clone backend repos." -ForegroundColor White
-            Write-Host "    A browser window will open. Follow the instructions to authenticate." -ForegroundColor White
             Write-Host ""
-            gh auth login --hostname github.com --git-protocol https --web
+            Write-Host "    ============================================" -ForegroundColor Cyan
+            Write-Host "    GitHub Authentication" -ForegroundColor Cyan
+            Write-Host "    ============================================" -ForegroundColor Cyan
+            Write-Host ""
+            Write-Host "    A browser will open to GitHub." -ForegroundColor White
+            Write-Host "    Enter the device code shown below and click Authorize." -ForegroundColor White
+            Write-Host ""
+            $env:GH_PROMPT_DISABLED = "1"
+            gh auth login --hostname github.com --git-protocol https --web --skip-ssh-key
+            $env:GH_PROMPT_DISABLED = ""
         }
 
         $null = gh auth status 2>&1
