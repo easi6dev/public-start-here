@@ -440,7 +440,19 @@ else {
     # Convert Windows path to WSL path directly (wslpath loses backslashes)
     $driveLetter = $setupWslPath.Substring(0, 1).ToLower()
     $wslScriptPath = "/mnt/$driveLetter" + $setupWslPath.Substring(2).Replace('\', '/')
-    wsl -d Ubuntu-24.04 -- bash "$wslScriptPath"
+    # Run as regular user (UID 1000), not root — brew rejects root
+    $wslUser = $null
+    try {
+        $rawUser = (wsl -d Ubuntu-24.04 -- awk "-F:" '{if($3==1000){print $1;exit}}' /etc/passwd 2>&1) -replace "`0",""
+        $wslUser = ($rawUser | Out-String).Trim()
+    } catch {}
+    if ($wslUser) {
+        wsl -d Ubuntu-24.04 -u $wslUser -- bash "$wslScriptPath"
+    }
+    else {
+        Write-Warn "No regular WSL user found (UID 1000). Running as default user."
+        wsl -d Ubuntu-24.04 -- bash "$wslScriptPath"
+    }
 
     # --- Phase 3: GitHub Auth + Clone Backend Repos ---
 
@@ -453,19 +465,17 @@ else {
         Write-Host "    Install gh and run clone-repos.ps1 manually later." -ForegroundColor White
     }
     else {
-        $authStatus = gh auth status 2>&1
-        if ($authStatus -notmatch "Logged in") {
+        # Check auth by exit code, not text matching (more reliable)
+        $null = gh auth status 2>&1
+        if ($LASTEXITCODE -ne 0) {
             Write-Host "    GitHub authentication required to clone backend repos." -ForegroundColor White
             Write-Host "    A browser window will open. Follow the instructions to authenticate." -ForegroundColor White
             Write-Host ""
             gh auth login --hostname github.com --git-protocol https --web
-            if ($LASTEXITCODE -ne 0) {
-                Write-Warn "GitHub authentication was not completed. Skipping Phase 3."
-            }
         }
 
-        $authCheck = gh auth status 2>&1
-        if ($authCheck -match "Logged in") {
+        $null = gh auth status 2>&1
+        if ($LASTEXITCODE -eq 0) {
             Write-OK "GitHub authenticated"
 
             Write-Host "    Downloading clone script from private repo ..." -ForegroundColor White
