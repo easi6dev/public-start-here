@@ -366,8 +366,10 @@ else {
 }
 
 if ($needsReboot) {
-    # Open project page after reboot so user can re-run the setup command
+    # Open project page + admin PowerShell after reboot
+    $setupCmd = "irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1 | iex"
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupGuide" -Value "cmd /c start https://github.com/easi6dev/public-start-here"
+    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupResume" -Value "powershell -Command `"Start-Process powershell -Verb RunAs -ArgumentList '-NoExit -Command $setupCmd'`""
 
     Write-Host ""
     Write-Host "    ============================================" -ForegroundColor Cyan
