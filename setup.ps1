@@ -247,7 +247,15 @@ if ($null -eq $wslFeature -or $wslFeature.State -ne "Enabled") {
     wsl --install --no-distribution 2>&1 | Out-Null
     Write-OK "WSL platform installed"
     Write-Warn "A reboot is required before installing Ubuntu 24.04."
-    Write-Warn "After rebooting, re-run this script to continue."
+
+    # Register RunOnce to auto-resume setup after reboot (runs once, then deletes itself)
+    $setupUrl = "https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1"
+    $resumeCmd = "Start-Process powershell -Verb RunAs -ArgumentList '-NoExit -Command irm $setupUrl | iex'"
+    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce" -Name "TadaSetupResume" -Value "powershell -WindowStyle Hidden -Command `"$resumeCmd`""
+    Write-OK "Setup will auto-resume after reboot (UAC prompt will appear)"
+    Write-Warn "Rebooting in 30 seconds... Press Ctrl+C to cancel."
+    Start-Sleep -Seconds 30
+    Restart-Computer -Force
 }
 else {
     # WSL platform is enabled, check for Ubuntu distro
