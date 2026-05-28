@@ -447,15 +447,16 @@ else {
         $wslUser = ($rawUser | Out-String).Trim()
         if ($wslUser -match "no such user") { $wslUser = $null }
     } catch {}
-    if ($wslUser) {
-        Write-Host "    Running as WSL user: $wslUser" -ForegroundColor Gray
-        wsl -d Ubuntu-24.04 -u $wslUser -- bash "$wslScriptPath"
+
+    if (-not $wslUser) {
+        Write-Host "    No regular WSL user found. Creating one ..." -ForegroundColor White
+        $wslUser = "dev"
+        wsl -d Ubuntu-24.04 -- bash -c "useradd -m -s /bin/bash -G sudo $wslUser && echo '${wslUser}:${wslUser}' | chpasswd && echo '$wslUser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/$wslUser"
+        Write-OK "WSL user '$wslUser' created (password: $wslUser, passwordless sudo)"
     }
-    else {
-        Write-Warn "No regular WSL user found (UID 1000). Running as default user."
-        Write-Warn "Homebrew install may fail. Create a WSL user first: wsl -d Ubuntu-24.04 then run 'adduser <name>'"
-        wsl -d Ubuntu-24.04 -- bash "$wslScriptPath"
-    }
+
+    Write-Host "    Running as WSL user: $wslUser" -ForegroundColor Gray
+    wsl -d Ubuntu-24.04 -u $wslUser -- bash "$wslScriptPath"
 
     # --- Phase 3: GitHub Auth + Clone Backend Repos ---
 
