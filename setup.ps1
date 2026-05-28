@@ -181,7 +181,10 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
 }
 else {
     Write-Host "    Installing Claude Code via native installer ..." -ForegroundColor White
-    & ([scriptblock]::Create((Invoke-WebRequest -Uri "https://claude.ai/install.ps1" -UseBasicParsing).Content))
+    $claudeInstaller = "$env:TEMP\claude-install.ps1"
+    Invoke-WebRequest -Uri "https://claude.ai/install.ps1" -OutFile $claudeInstaller -UseBasicParsing
+    & $claudeInstaller
+    Remove-Item $claudeInstaller -Force -ErrorAction SilentlyContinue
     Write-OK "Claude Code installed"
 }
 
