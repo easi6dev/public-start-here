@@ -547,10 +547,14 @@ if (-not (Test-Path $wtDir)) {
         # Detect an existing binding in BOTH arrays: WT auto-migrates an inline
         # {command, keys} entry into actions[] (command) + keybindings[] (keys on re-save),
         # so checking only one array would let the binding be added twice on re-runs.
+        # Guard property access: under StrictMode, reading $e.keys on an actions[] entry
+        # that has no 'keys' (modern WT stores keys in keybindings[]) would throw.
         $has = $false
         foreach ($k in @('actions','keybindings')) {
             if ($json.PSObject.Properties[$k]) {
-                foreach ($e in @($json.$k)) { if ($e.keys -eq 'shift+enter') { $has = $true } }
+                foreach ($e in @($json.$k)) {
+                    if ($null -ne $e -and $e.PSObject.Properties['keys'] -and $e.keys -eq 'shift+enter') { $has = $true }
+                }
             }
         }
 
