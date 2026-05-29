@@ -333,20 +333,27 @@ SL_LINK="$HOME/.claude/statusline-command.sh"
 WIN_SL="/mnt/c/Users/$WIN_USER/.claude/statusline-command.sh"
 
 if [ -f "$WIN_SL" ]; then
-    # Share the same file Windows uses (single source of truth). The script is written to
-    # be cross-env: 'export PATH=/usr/bin:/mingw64/bin' is a no-op extra entry on WSL.
-    if [ -e "$SL_LINK" ] && [ ! -L "$SL_LINK" ]; then
-        mv "$SL_LINK" "$SL_LINK.bak"
-        ok "Backed up existing statusline-command.sh -> $SL_LINK.bak"
+    # Share the same file Windows uses (single source of truth). The script is cross-env:
+    # the Windows-only PATH entries are harmless no-ops on WSL.
+    if [ -L "$SL_LINK" ] && [ "$(readlink "$SL_LINK")" = "$WIN_SL" ]; then
+        skip "statusline-command.sh already symlinked from Windows"
+    else
+        # Back up a pre-existing real file before replacing it with the symlink
+        if [ -e "$SL_LINK" ] && [ ! -L "$SL_LINK" ]; then
+            mv "$SL_LINK" "$SL_LINK.bak"
+            ok "Backed up existing statusline-command.sh -> $SL_LINK.bak"
+        fi
+        ln -sfn "$WIN_SL" "$SL_LINK"
+        ok "statusline-command.sh symlinked from Windows ($WIN_SL)"
     fi
-    ln -sfn "$WIN_SL" "$SL_LINK"
-    ok "statusline-command.sh symlinked from Windows ($WIN_SL)"
 else
     # Fallback: Windows file not present (e.g. running setup-wsl.sh standalone) — write a copy
     cat > "$SL_LINK" <<'SLEOF'
 #!/bin/sh
-# Ensure coreutils resolve regardless of how bash was launched (no-op extra path on WSL)
-export PATH="/usr/bin:/mingw64/bin:$PATH"
+# Make dependencies resolvable regardless of the spawn PATH. The Windows-only entries
+# (/mingw64/bin, WinGet Links for jq) are harmless no-ops on WSL, where jq/git come from
+# the normal Linux PATH.
+export PATH="/usr/bin:/mingw64/bin:$HOME/AppData/Local/Microsoft/WinGet/Links:$PATH"
 input=$(cat)
 cwd=$(echo "$input" | jq -r '.cwd')
 model=$(echo "$input" | jq -r '.model.display_name // empty')
@@ -384,7 +391,12 @@ fi
 SL_SETTINGS="$HOME/.claude/settings.json"
 SL_CMD="bash $HOME/.claude/statusline-command.sh"
 if command_exists jq; then
-    if [ -f "$SL_SETTINGS" ]; then
+    # Idempotent: skip the rewrite when statusLine already matches. Rewriting on every run
+    # makes a live Claude Code hot-reload its statusLine unnecessarily.
+    CUR_SL=$(jq -r '.statusLine.command // empty' "$SL_SETTINGS" 2>/dev/null)
+    if [ "$CUR_SL" = "$SL_CMD" ]; then
+        skip "statusLine already configured in settings.json"
+    elif [ -f "$SL_SETTINGS" ]; then
         SL_TMP=$(mktemp)
         if jq --arg cmd "$SL_CMD" '.statusLine = {type:"command", command:$cmd}' "$SL_SETTINGS" > "$SL_TMP" 2>/dev/null; then
             mv "$SL_TMP" "$SL_SETTINGS"
@@ -410,13 +422,17 @@ CM_LINK="$HOME/.claude/CLAUDE.md"
 WIN_CM="/mnt/c/Users/$WIN_USER/.claude/CLAUDE.md"
 
 if [ -f "$WIN_CM" ]; then
-    # Back up a pre-existing real file before replacing it with the symlink
-    if [ -e "$CM_LINK" ] && [ ! -L "$CM_LINK" ]; then
-        mv "$CM_LINK" "$CM_LINK.bak"
-        ok "Backed up existing CLAUDE.md -> $CM_LINK.bak"
+    if [ -L "$CM_LINK" ] && [ "$(readlink "$CM_LINK")" = "$WIN_CM" ]; then
+        skip "CLAUDE.md already symlinked from Windows"
+    else
+        # Back up a pre-existing real file before replacing it with the symlink
+        if [ -e "$CM_LINK" ] && [ ! -L "$CM_LINK" ]; then
+            mv "$CM_LINK" "$CM_LINK.bak"
+            ok "Backed up existing CLAUDE.md -> $CM_LINK.bak"
+        fi
+        ln -sfn "$WIN_CM" "$CM_LINK"
+        ok "CLAUDE.md symlinked from Windows ($WIN_CM)"
     fi
-    ln -sfn "$WIN_CM" "$CM_LINK"
-    ok "CLAUDE.md symlinked from Windows ($WIN_CM)"
 else
     # No standalone fallback on purpose: Windows is the single source for this content,
     # so run setup.ps1 on Windows first (the combined flow always does).

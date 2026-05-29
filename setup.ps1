@@ -239,8 +239,13 @@ if (-not (Test-Path $claudeDir)) {
 # statusline-command.sh — runs via Git Bash; needs jq + git on PATH (installed in Phase 1)
 $statusLineScript = @'
 #!/bin/sh
-# Ensure Git Bash coreutils (cat/awk/tr/cut) resolve regardless of how bash was launched
-export PATH="/usr/bin:/mingw64/bin:$PATH"
+# Make dependencies resolvable regardless of the PATH Claude Code spawns us with:
+#   /usr/bin, /mingw64/bin -> Git Bash coreutils + git (cat/awk/tr/cut/git)
+#   WinGet Links           -> jq (winget installs jq ONLY here, not in Git Bash dirs);
+#                             without this, jq fails and the statusline collapses to blank.
+# On WSL the WinGet path simply doesn't exist (harmless no-op) and jq comes from the
+# normal Linux PATH.
+export PATH="/usr/bin:/mingw64/bin:$HOME/AppData/Local/Microsoft/WinGet/Links:$PATH"
 input=$(cat)
 cwd=$(echo "$input" | jq -r '.cwd')
 model=$(echo "$input" | jq -r '.model.display_name // empty')
@@ -293,8 +298,15 @@ fi
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 $statusLinePath = Join-Path $claudeDir "statusline-command.sh"
-[System.IO.File]::WriteAllText($statusLinePath, $statusLineScript, $utf8NoBom)
-Write-OK "statusline-command.sh written to $statusLinePath"
+# Idempotent: only rewrite when content actually changed. Rewriting on every run would
+# bump the mtime and make a live Claude Code re-spawn the statusline needlessly.
+$existingSh = if (Test-Path $statusLinePath) { [System.IO.File]::ReadAllText($statusLinePath) } else { $null }
+if ($existingSh -ceq $statusLineScript) {
+    Write-Skip "statusline-command.sh already up to date"
+} else {
+    [System.IO.File]::WriteAllText($statusLinePath, $statusLineScript, $utf8NoBom)
+    Write-OK "statusline-command.sh written to $statusLinePath"
+}
 
 # Resolve Git Bash absolute path — a bare 'bash' may resolve to WSL on a fresh PC,
 # which cannot run a Windows-path script.
@@ -338,14 +350,25 @@ if ($null -eq $settings) {
     $settings = [PSCustomObject]@{}
 }
 if ($settings -is [System.Management.Automation.PSCustomObject]) {
-    $statusLineObj = [PSCustomObject]@{
-        type    = "command"
-        command = $statusLineCommand
+    # Idempotent: only rewrite settings.json when the statusLine actually differs.
+    # Rewriting on every run makes a live Claude Code hot-reload its statusLine, which
+    # is exactly what blanked it mid-setup. StrictMode-safe property probes throughout.
+    $curStatusLine = if ($settings.PSObject.Properties['statusLine']) { $settings.statusLine } else { $null }
+    $curType = if ($curStatusLine -and $curStatusLine.PSObject.Properties['type'])    { $curStatusLine.type }    else { $null }
+    $curCmd  = if ($curStatusLine -and $curStatusLine.PSObject.Properties['command']) { $curStatusLine.command } else { $null }
+
+    if ($curType -eq "command" -and $curCmd -eq $statusLineCommand) {
+        Write-Skip "statusLine already configured in settings.json"
+    } else {
+        $statusLineObj = [PSCustomObject]@{
+            type    = "command"
+            command = $statusLineCommand
+        }
+        $settings | Add-Member -NotePropertyName statusLine -NotePropertyValue $statusLineObj -Force
+        $json = $settings | ConvertTo-Json -Depth 20
+        [System.IO.File]::WriteAllText($settingsPath, $json, $utf8NoBom)
+        Write-OK "statusLine configured in settings.json"
     }
-    $settings | Add-Member -NotePropertyName statusLine -NotePropertyValue $statusLineObj -Force
-    $json = $settings | ConvertTo-Json -Depth 20
-    [System.IO.File]::WriteAllText($settingsPath, $json, $utf8NoBom)
-    Write-OK "statusLine configured in settings.json"
 }
 
 # Claude Code user-level CLAUDE.md (shared team defaults; WSL symlinks to this file)
