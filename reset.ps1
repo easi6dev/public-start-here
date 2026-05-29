@@ -30,6 +30,11 @@ function Write-Skip {
     Write-Host "    [SKIP] $Message" -ForegroundColor Yellow
 }
 
+function Write-Warn {
+    param([string]$Message)
+    Write-Host "    [WARN] $Message" -ForegroundColor DarkYellow
+}
+
 function Uninstall-WingetPackage {
     param(
         [string]$Id,
