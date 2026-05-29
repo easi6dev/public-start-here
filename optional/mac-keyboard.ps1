@@ -33,16 +33,16 @@ if (-not (Test-Path $ptDir)) {
 $config = @{
     remapKeys = @{
         inProcess = @(
-            @{ originalKeys = "56"; newRemapKeys = "162" }   # Left Alt -> Left Ctrl
-            @{ originalKeys = "162"; newRemapKeys = "56" }   # Left Ctrl -> Left Alt
-            @{ originalKeys = "165"; newRemapKeys = "163" }  # Right Alt -> Right Ctrl
-            @{ originalKeys = "163"; newRemapKeys = "165" }  # Right Ctrl -> Right Alt
-            @{ originalKeys = "20"; newRemapKeys = "242" }   # Caps Lock -> IME toggle (한/영)
+            @{ originalKeys = "164"; newRemapKeys = "162" }  # Left Alt (0xA4) -> Left Ctrl (0xA2)
+            @{ originalKeys = "162"; newRemapKeys = "164" }  # Left Ctrl (0xA2) -> Left Alt (0xA4)
+            @{ originalKeys = "165"; newRemapKeys = "163" }  # Right Alt (0xA5) -> Right Ctrl (0xA3)
+            @{ originalKeys = "163"; newRemapKeys = "165" }  # Right Ctrl (0xA3) -> Right Alt (0xA5)
+            @{ originalKeys = "20"; newRemapKeys = "21" }    # Caps Lock (0x14) -> VK_HANGUL (0x15, 한/영)
         )
     }
     remapShortcuts = @{
         global = @(
-            @{ originalKeys = "56;32"; newRemapKeys = "242" }  # Left Alt + Space -> IME toggle (한/영)
+            @{ originalKeys = "164;32"; newRemapKeys = "21" }  # Left Alt + Space -> VK_HANGUL (한/영)
         )
         appSpecific = @()
     }
