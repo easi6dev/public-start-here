@@ -371,8 +371,11 @@ export NVM_DIR="$HOME/.nvm"
 
 # Claude Code
 export PATH="$HOME/.local/bin:$PATH"
+
+# zoxide (smart cd, fasd replacement)
+eval "$(zoxide init zsh)"
 ZSHPATH
-    ok "PATH entries added to .zshrc (brew, nvm, claude)"
+    ok "PATH entries added to .zshrc (brew, nvm, claude, zoxide)"
 fi
 
 # Set zsh as default shell
