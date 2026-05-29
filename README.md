@@ -140,7 +140,10 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 
 ### Mac-style keyboard (Ctrl ↔ Alt swap)
 
-If you're used to Mac keyboard shortcuts (thumb on Command), this swaps Ctrl and Alt via PowerToys:
+If you're used to Mac keyboard shortcuts, this configures PowerToys to:
+- **Ctrl ↔ Alt swap** — Use your thumb for shortcuts (like Command on Mac)
+- **Caps Lock → 한/영** — Tap to switch Korean/English
+- **Left Alt + Space → 한/영** — Mac-style IME toggle
 
 ```powershell
 irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/optional/mac-keyboard.ps1 | iex

@@ -15,6 +15,8 @@ Write-Host "  Left Alt  -> Left Ctrl   (thumb for shortcuts)" -ForegroundColor G
 Write-Host "  Left Ctrl -> Left Alt" -ForegroundColor Gray
 Write-Host "  Right Alt -> Right Ctrl" -ForegroundColor Gray
 Write-Host "  Right Ctrl -> Right Alt" -ForegroundColor Gray
+Write-Host "  Caps Lock -> IME toggle  (tap to switch Korean/English)" -ForegroundColor Gray
+Write-Host "  Left Alt + Space -> IME toggle" -ForegroundColor Gray
 Write-Host ""
 
 $ptDir = "$env:LOCALAPPDATA\Microsoft\PowerToys\Keyboard Manager"
@@ -35,10 +37,13 @@ $config = @{
             @{ originalKeys = "162"; newRemapKeys = "56" }   # Left Ctrl -> Left Alt
             @{ originalKeys = "165"; newRemapKeys = "163" }  # Right Alt -> Right Ctrl
             @{ originalKeys = "163"; newRemapKeys = "165" }  # Right Ctrl -> Right Alt
+            @{ originalKeys = "20"; newRemapKeys = "242" }   # Caps Lock -> IME toggle (한/영)
         )
     }
     remapShortcuts = @{
-        global = @()
+        global = @(
+            @{ originalKeys = "56;32"; newRemapKeys = "242" }  # Left Alt + Space -> IME toggle (한/영)
+        )
         appSpecific = @()
     }
 }
