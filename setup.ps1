@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-05-29.5"
+$SetupVersion = "2026-05-29.6"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -341,7 +341,7 @@ $settingsPath = Join-Path $claudeDir "settings.json"
 $settings = $null
 if (Test-Path $settingsPath) {
     try {
-        $settings = Get-Content $settingsPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        $settings = [System.IO.File]::ReadAllText($settingsPath) | ConvertFrom-Json -ErrorAction Stop
     } catch {
         Write-Warn "settings.json is not valid JSON — leaving it as-is; add statusLine manually"
     }
@@ -569,7 +569,7 @@ if (-not (Test-Path $wtDir)) {
         # Missing file = WT never launched; an empty object is a valid partial settings
         # file that WT layers over its built-in defaults.
         $json = if (Test-Path $wtSettings) {
-            (Get-Content $wtSettings -Raw) | ConvertFrom-Json
+            [System.IO.File]::ReadAllText($wtSettings) | ConvertFrom-Json
         } else { [pscustomobject]@{} }
 
         # Detect an existing binding in BOTH arrays: WT auto-migrates an inline
