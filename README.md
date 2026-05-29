@@ -102,6 +102,7 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 - **sd** — Intuitive find-and-replace tool (sed replacement)
 - **ktlint** — Kotlin code linter and formatter
 - **Claude Code** — AI coding assistant CLI (native install)
+  - statusLine pre-configured (`user@host:dir [model] (ctx%)`) via Git Bash — no per-person setup needed
 - **flipper-server** — Mobile debugging tool, browser-based (`npx flipper-server` to run)
 
 ### Windows — Developer Settings (auto-configured)
@@ -135,6 +136,7 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 - **oh-my-zsh** — Zsh framework with themes and plugin management
 - **zsh-autosuggestions** — Fish-like command suggestions as you type
 - **zsh-syntax-highlighting** — Real-time syntax highlighting in terminal
+- **Claude Code statusLine** — symlinked to the Windows `statusline-command.sh`, so both environments share one file (edit once, both update)
 
 ### WSL Ubuntu 24.04 — CLI Tools (via brew)
 

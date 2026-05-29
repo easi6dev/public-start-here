@@ -324,6 +324,105 @@ else
     warn "Windows gh config not found at $WIN_GH_DIR — run 'gh auth login' in Windows first"
 fi
 
+# --- Claude Code statusLine (shared with Windows via symlink) ---
+
+step "Configuring Claude Code statusLine"
+
+mkdir -p "$HOME/.claude"
+SL_LINK="$HOME/.claude/statusline-command.sh"
+WIN_SL="/mnt/c/Users/$WIN_USER/.claude/statusline-command.sh"
+
+if [ -f "$WIN_SL" ]; then
+    # Share the same file Windows uses (single source of truth). The script is written to
+    # be cross-env: 'export PATH=/usr/bin:/mingw64/bin' is a no-op extra entry on WSL.
+    if [ -e "$SL_LINK" ] && [ ! -L "$SL_LINK" ]; then
+        mv "$SL_LINK" "$SL_LINK.bak"
+        ok "Backed up existing statusline-command.sh -> $SL_LINK.bak"
+    fi
+    ln -sfn "$WIN_SL" "$SL_LINK"
+    ok "statusline-command.sh symlinked from Windows ($WIN_SL)"
+else
+    # Fallback: Windows file not present (e.g. running setup-wsl.sh standalone) — write a copy
+    cat > "$SL_LINK" <<'SLEOF'
+#!/bin/sh
+# Ensure coreutils resolve regardless of how bash was launched (no-op extra path on WSL)
+export PATH="/usr/bin:/mingw64/bin:$PATH"
+input=$(cat)
+cwd=$(echo "$input" | jq -r '.cwd')
+model=$(echo "$input" | jq -r '.model.display_name // empty')
+ctx_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
+effort=$(echo "$input" | jq -r '.effort.level // empty')
+thinking=$(echo "$input" | jq -r '.thinking.enabled // false')
+
+# Git branch: run against cwd so it works in any repo regardless of JSON fields
+git_branch=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# Shorten cwd to the last N path segments (change PATH_SEGMENTS to taste)
+PATH_SEGMENTS=2
+disp_cwd=$(printf '%s' "$cwd" | tr '\\' '/' | awk -F'/' -v n="$PATH_SEGMENTS" '{
+  out=""; start=NF-n+1; if(start<1) start=1;
+  for(i=start;i<=NF;i++){ if($i!=""){ out=(out=="")?$i:out"/"$i } }
+  if(start>1) out=".../" out;
+  print out
+}')
+
+# Base: user@host:cwd  (hostname without -s for portability)
+short_host=$(hostname 2>/dev/null | cut -d. -f1)
+printf '\033[01;32m%s@%s\033[00m:\033[01;34m%s\033[00m' "$(whoami)" "$short_host" "$disp_cwd"
+
+if [ -n "$git_branch" ]; then printf ' \033[01;35m(%s)\033[00m' "$git_branch"; fi
+if [ -n "$model" ]; then printf ' \033[01;36m[%s]\033[00m' "$model"; fi
+if [ -n "$ctx_pct" ]; then ctx_int=$(printf '%.0f' "$ctx_pct"); printf ' \033[01;33m(%s%% ctx)\033[00m' "$ctx_int"; fi
+if [ -n "$effort" ]; then printf ' \033[00;33m[effort:%s]\033[00m' "$effort"; fi
+if [ "$thinking" = "true" ]; then printf ' \033[01;37m[thinking]\033[00m'; fi
+SLEOF
+    chmod +x "$SL_LINK"
+    warn "Windows statusline not found at $WIN_SL — wrote a standalone WSL copy instead"
+fi
+
+# Merge statusLine into ~/.claude/settings.json (preserve other keys)
+SL_SETTINGS="$HOME/.claude/settings.json"
+SL_CMD="bash $HOME/.claude/statusline-command.sh"
+if command_exists jq; then
+    if [ -f "$SL_SETTINGS" ]; then
+        SL_TMP=$(mktemp)
+        if jq --arg cmd "$SL_CMD" '.statusLine = {type:"command", command:$cmd}' "$SL_SETTINGS" > "$SL_TMP" 2>/dev/null; then
+            mv "$SL_TMP" "$SL_SETTINGS"
+            ok "statusLine merged into settings.json"
+        else
+            rm -f "$SL_TMP"
+            warn "settings.json is not valid JSON — add statusLine manually"
+        fi
+    else
+        jq -n --arg cmd "$SL_CMD" '{statusLine:{type:"command", command:$cmd}}' > "$SL_SETTINGS"
+        ok "settings.json created with statusLine"
+    fi
+else
+    warn "jq not found — skipping statusLine settings merge"
+fi
+
+# --- Claude Code CLAUDE.md (symlinked from Windows; Windows is the single source) ---
+
+step "Configuring Claude Code CLAUDE.md"
+
+mkdir -p "$HOME/.claude"
+CM_LINK="$HOME/.claude/CLAUDE.md"
+WIN_CM="/mnt/c/Users/$WIN_USER/.claude/CLAUDE.md"
+
+if [ -f "$WIN_CM" ]; then
+    # Back up a pre-existing real file before replacing it with the symlink
+    if [ -e "$CM_LINK" ] && [ ! -L "$CM_LINK" ]; then
+        mv "$CM_LINK" "$CM_LINK.bak"
+        ok "Backed up existing CLAUDE.md -> $CM_LINK.bak"
+    fi
+    ln -sfn "$WIN_CM" "$CM_LINK"
+    ok "CLAUDE.md symlinked from Windows ($WIN_CM)"
+else
+    # No standalone fallback on purpose: Windows is the single source for this content,
+    # so run setup.ps1 on Windows first (the combined flow always does).
+    warn "Windows CLAUDE.md not found at $WIN_CM — run setup.ps1 on Windows first"
+fi
+
 # --- zsh + oh-my-zsh + plugins ---
 
 step "Setting up zsh + oh-my-zsh"

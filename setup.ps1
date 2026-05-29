@@ -223,6 +223,228 @@ else {
     Write-OK "Claude Code installed"
 }
 
+# Claude Code statusLine (shared team config)
+Write-Step "Configuring Claude Code statusLine"
+
+$claudeDir = Join-Path $env:USERPROFILE ".claude"
+if (-not (Test-Path $claudeDir)) {
+    New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
+}
+
+# statusline-command.sh — runs via Git Bash; needs jq + git on PATH (installed in Phase 1)
+$statusLineScript = @'
+#!/bin/sh
+# Ensure Git Bash coreutils (cat/awk/tr/cut) resolve regardless of how bash was launched
+export PATH="/usr/bin:/mingw64/bin:$PATH"
+input=$(cat)
+cwd=$(echo "$input" | jq -r '.cwd')
+model=$(echo "$input" | jq -r '.model.display_name // empty')
+ctx_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
+effort=$(echo "$input" | jq -r '.effort.level // empty')
+thinking=$(echo "$input" | jq -r '.thinking.enabled // false')
+
+# Git branch: run against cwd so it works in any repo regardless of JSON fields
+git_branch=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# Shorten cwd to the last N path segments (change PATH_SEGMENTS to taste)
+PATH_SEGMENTS=2
+disp_cwd=$(printf '%s' "$cwd" | tr '\\' '/' | awk -F'/' -v n="$PATH_SEGMENTS" '{
+  out=""; start=NF-n+1; if(start<1) start=1;
+  for(i=start;i<=NF;i++){ if($i!=""){ out=(out=="")?$i:out"/"$i } }
+  if(start>1) out=".../" out;
+  print out
+}')
+
+# Base: user@host:cwd  (hostname without -s for Git Bash compatibility)
+short_host=$(hostname 2>/dev/null | cut -d. -f1)
+printf '\033[01;32m%s@%s\033[00m:\033[01;34m%s\033[00m' "$(whoami)" "$short_host" "$disp_cwd"
+
+# Git branch (magenta) — only when cwd is inside a git repo
+if [ -n "$git_branch" ]; then
+  printf ' \033[01;35m(%s)\033[00m' "$git_branch"
+fi
+
+# Model name (cyan)
+if [ -n "$model" ]; then
+  printf ' \033[01;36m[%s]\033[00m' "$model"
+fi
+
+# Context used percentage (bold yellow)
+if [ -n "$ctx_pct" ]; then
+  ctx_int=$(printf '%.0f' "$ctx_pct")
+  printf ' \033[01;33m(%s%% ctx)\033[00m' "$ctx_int"
+fi
+
+# Effort level (dim yellow) — only when present
+if [ -n "$effort" ]; then
+  printf ' \033[00;33m[effort:%s]\033[00m' "$effort"
+fi
+
+# Thinking enabled (bold white) — only when true
+if [ "$thinking" = "true" ]; then
+  printf ' \033[01;37m[thinking]\033[00m'
+fi
+'@ -replace "`r`n", "`n"
+
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+$statusLinePath = Join-Path $claudeDir "statusline-command.sh"
+[System.IO.File]::WriteAllText($statusLinePath, $statusLineScript, $utf8NoBom)
+Write-OK "statusline-command.sh written to $statusLinePath"
+
+# Resolve Git Bash absolute path — a bare 'bash' may resolve to WSL on a fresh PC,
+# which cannot run a Windows-path script.
+$bashExe = $null
+$gitCmd = Get-Command git.exe -ErrorAction SilentlyContinue
+if ($gitCmd) {
+    $gitRoot = Split-Path (Split-Path $gitCmd.Source)   # <root>\cmd\git.exe -> <root>
+    $candidate = Join-Path $gitRoot "bin\bash.exe"
+    if (Test-Path $candidate) { $bashExe = $candidate }
+}
+if (-not $bashExe) {
+    foreach ($p in @(
+        "$env:ProgramFiles\Git\bin\bash.exe",
+        "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
+        "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
+    )) {
+        if ($p -and (Test-Path $p)) { $bashExe = $p; break }
+    }
+}
+
+$shPathForward = $statusLinePath -replace '\\', '/'
+if ($bashExe) {
+    $bashForward = $bashExe -replace '\\', '/'
+    $statusLineCommand = "`"$bashForward`" `"$shPathForward`""
+} else {
+    Write-Warn "Git Bash not found — statusLine will use bare 'bash' (may need a manual fix)"
+    $statusLineCommand = "bash `"$shPathForward`""
+}
+
+# Merge statusLine into settings.json without clobbering existing settings
+$settingsPath = Join-Path $claudeDir "settings.json"
+$settings = $null
+if (Test-Path $settingsPath) {
+    try {
+        $settings = Get-Content $settingsPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        Write-Warn "settings.json is not valid JSON — leaving it as-is; add statusLine manually"
+    }
+}
+if ($null -eq $settings) {
+    $settings = [PSCustomObject]@{}
+}
+if ($settings -is [System.Management.Automation.PSCustomObject]) {
+    $statusLineObj = [PSCustomObject]@{
+        type    = "command"
+        command = $statusLineCommand
+    }
+    $settings | Add-Member -NotePropertyName statusLine -NotePropertyValue $statusLineObj -Force
+    $json = $settings | ConvertTo-Json -Depth 20
+    [System.IO.File]::WriteAllText($settingsPath, $json, $utf8NoBom)
+    Write-OK "statusLine configured in settings.json"
+}
+
+# Claude Code user-level CLAUDE.md (shared team defaults; WSL symlinks to this file)
+Write-Step "Configuring Claude Code CLAUDE.md"
+
+# Managed block is wrapped in markers so re-runs are idempotent and any user-authored
+# content outside the markers is preserved.
+$claudeMdStart = "<!-- TADA-TEAM-DEFAULTS:START (managed by setup.ps1 — do not edit inside) -->"
+$claudeMdEnd   = "<!-- TADA-TEAM-DEFAULTS:END -->"
+$claudeMdBody = @'
+<MOST_IMPORTANT_RULE>
+Behavioral guidelines to reduce common LLM coding mistakes, derived from Andrej Karpathy's observations on LLM coding pitfalls.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+</MOST_IMPORTANT_RULE>
+
+<TERMINOLOGY>
+- **CO Region**: US Colorado State
+- **Slack Workspace URL**: `https://mvllabs.slack.com/`
+- **Jira URL**: `https://mvlchain.atlassian.net/`
+</TERMINOLOGY>
+
+<CLI_Tools>
+- Use `rg` instead of `grep` for faster text searches
+- Use `fd` instead of `find` for file lookups
+- Use `bat` instead of `cat` for file viewing
+- Use `eza` instead of `ls` for directory listing
+- Use `sd` instead of `sed` for text replacement
+- Use `delta` for git diff viewing
+- Use `fzf` for interactive fuzzy finding
+- Use `zoxide` (`z`) instead of `cd` for directory navigation
+</CLI_Tools>
+'@ -replace "`r`n", "`n"
+
+$claudeMdPath = Join-Path $claudeDir "CLAUDE.md"
+$managedBlock = "$claudeMdStart`n$claudeMdBody`n$claudeMdEnd`n"
+$existingMd = ""
+if (Test-Path $claudeMdPath) { $existingMd = (Get-Content $claudeMdPath -Raw) -replace "`r`n", "`n" }
+
+if ($existingMd -like "*$claudeMdStart*") {
+    Write-Skip "Team defaults already present in CLAUDE.md"
+} else {
+    if ($existingMd -and -not $existingMd.EndsWith("`n")) { $existingMd += "`n" }
+    $newMd = if ($existingMd) { "$existingMd`n$managedBlock" } else { $managedBlock }
+    [System.IO.File]::WriteAllText($claudeMdPath, $newMd, $utf8NoBom)
+    Write-OK "Team defaults written to $claudeMdPath"
+}
+
 # Flipper (mobile debugging, browser-based)
 Write-Step "Installing Flipper server"
 $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
@@ -300,6 +522,56 @@ if ($null -ne $longPaths -and $longPaths.PSObject.Properties["LongPathsEnabled"]
 } else {
     Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1
     Write-OK "Long Paths enabled (no 260-char limit)"
+}
+
+# --- Windows Terminal: Shift+Enter -> newline ---
+# Binds Shift+Enter to send ESC+CR, which Claude Code (and similar TUIs) read as
+# "insert newline" instead of "submit". Windows Terminal captures the key before the
+# shell, so this works for any profile (PowerShell, WSL, cmd) running inside WT. On
+# Win11 22H2+ WT is the default terminal, so standalone PowerShell/WSL windows inherit
+# it too. Git Bash (mintty) is its own emulator and is intentionally out of scope.
+
+Write-Step "Configuring Windows Terminal Shift+Enter binding"
+$wtDir      = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState"
+$wtSettings = Join-Path $wtDir "settings.json"
+if (-not (Test-Path $wtDir)) {
+    Write-Skip "Windows Terminal not present"
+} else {
+    try {
+        # Missing file = WT never launched; an empty object is a valid partial settings
+        # file that WT layers over its built-in defaults.
+        $json = if (Test-Path $wtSettings) {
+            (Get-Content $wtSettings -Raw) | ConvertFrom-Json
+        } else { [pscustomobject]@{} }
+
+        # Detect an existing binding in BOTH arrays: WT auto-migrates an inline
+        # {command, keys} entry into actions[] (command) + keybindings[] (keys on re-save),
+        # so checking only one array would let the binding be added twice on re-runs.
+        $has = $false
+        foreach ($k in @('actions','keybindings')) {
+            if ($json.PSObject.Properties[$k]) {
+                foreach ($e in @($json.$k)) { if ($e.keys -eq 'shift+enter') { $has = $true } }
+            }
+        }
+
+        if ($has) { Write-Skip "Shift+Enter binding already present" }
+        else {
+            if (-not $json.PSObject.Properties['actions']) {
+                $json | Add-Member -NotePropertyName actions -NotePropertyValue @()
+            }
+            $esc = [char]27   # Windows PowerShell 5.1 has no `e escape; build ESC explicitly
+            $binding = [pscustomobject]@{
+                command = [pscustomobject]@{ action = 'sendInput'; input = ($esc + "`r") }
+                keys    = 'shift+enter'
+            }
+            $json.actions = @($json.actions) + $binding
+            # -Depth 32: the default of 2 truncates the nested profiles tree and corrupts
+            # the file. WriteAllText with a BOM-less UTF-8 encoder per WT's requirement.
+            $out = $json | ConvertTo-Json -Depth 32
+            [System.IO.File]::WriteAllText($wtSettings, $out, (New-Object System.Text.UTF8Encoding $false))
+            Write-OK "Shift+Enter -> newline binding added"
+        }
+    } catch { Write-Warn "Could not update Windows Terminal settings: $_" }
 }
 
 # --- hosts file (host.docker.internal) ---
