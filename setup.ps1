@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-05-29.4"
+$SetupVersion = "2026-05-29.5"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -462,7 +462,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 $claudeMdPath = Join-Path $claudeDir "CLAUDE.md"
 $managedBlock = "$claudeMdStart`n$claudeMdBody`n$claudeMdEnd`n"
 $existingMd = ""
-if (Test-Path $claudeMdPath) { $existingMd = (Get-Content $claudeMdPath -Raw) -replace "`r`n", "`n" }
+if (Test-Path $claudeMdPath) { $existingMd = [System.IO.File]::ReadAllText($claudeMdPath) -replace "`r`n", "`n" }
 
 if ($existingMd -like "*$claudeMdStart*") {
     Write-Skip "Team defaults already present in CLAUDE.md"
