@@ -83,7 +83,7 @@ sudo apt install -y \
 # Services + utilities
 sudo apt install -y --fix-missing \
     mongodb-org rabbitmq-server postgresql-16 postgresql-16-postgis-3 redis-server \
-    unzip jq git openjdk-21-jdk build-essential
+    unzip jq git openjdk-21-jdk build-essential zsh
 
 ok "APT packages installed"
 
@@ -292,6 +292,11 @@ if command_exists claude; then
     skip "Claude Code already installed"
 else
     curl -fsSL https://claude.ai/install.sh | bash
+    # Add ~/.local/bin to PATH if not already there
+    if ! grep -q '\.local/bin' ~/.bashrc 2>/dev/null; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+    fi
+    export PATH="$HOME/.local/bin:$PATH"
     ok "Claude Code installed"
 fi
 
@@ -317,6 +322,65 @@ if [ -d "$WIN_GH_DIR" ]; then
     fi
 else
     warn "Windows gh config not found at $WIN_GH_DIR — run 'gh auth login' in Windows first"
+fi
+
+# --- zsh + oh-my-zsh + plugins ---
+
+step "Setting up zsh + oh-my-zsh"
+
+if [ -d "$HOME/.oh-my-zsh" ]; then
+    skip "oh-my-zsh already installed"
+else
+    RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+    ok "oh-my-zsh installed"
+fi
+
+# Plugins
+ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+
+if [ -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]; then
+    skip "zsh-autosuggestions already installed"
+else
+    git clone https://github.com/zsh-users/zsh-autosuggestions "$ZSH_CUSTOM/plugins/zsh-autosuggestions" 2>/dev/null
+    ok "zsh-autosuggestions installed"
+fi
+
+if [ -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]; then
+    skip "zsh-syntax-highlighting already installed"
+else
+    git clone https://github.com/zsh-users/zsh-syntax-highlighting "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" 2>/dev/null
+    ok "zsh-syntax-highlighting installed"
+fi
+
+# Enable plugins in .zshrc
+if grep -q "plugins=(git)" ~/.zshrc 2>/dev/null; then
+    sed -i 's/plugins=(git)/plugins=(git zsh-autosuggestions zsh-syntax-highlighting)/' ~/.zshrc
+    ok "Plugins enabled in .zshrc"
+fi
+
+# Copy PATH entries from .bashrc to .zshrc (brew, nvm, claude)
+if ! grep -q "linuxbrew" ~/.zshrc 2>/dev/null; then
+    cat >> ~/.zshrc << 'ZSHPATH'
+
+# Homebrew
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+# nvm
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+# Claude Code
+export PATH="$HOME/.local/bin:$PATH"
+ZSHPATH
+    ok "PATH entries added to .zshrc (brew, nvm, claude)"
+fi
+
+# Set zsh as default shell
+if [ "$(basename "$SHELL")" != "zsh" ]; then
+    sudo chsh -s "$(which zsh)" "$(whoami)"
+    ok "Default shell changed to zsh"
+else
+    skip "zsh is already the default shell"
 fi
 
 # --- Start services ---

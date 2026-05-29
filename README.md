@@ -129,6 +129,13 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 - **uv** — Python version and package manager (`uv python install 3.12`, `uv venv`)
 - **Python 3.12** — Installed via uv, no separate pyenv needed
 
+### WSL Ubuntu 24.04 — Shell
+
+- **zsh** — Default shell (replaces bash)
+- **oh-my-zsh** — Zsh framework with themes and plugin management
+- **zsh-autosuggestions** — Fish-like command suggestions as you type
+- **zsh-syntax-highlighting** — Real-time syntax highlighting in terminal
+
 ### WSL Ubuntu 24.04 — CLI Tools (via brew)
 
 - **gh** — GitHub CLI

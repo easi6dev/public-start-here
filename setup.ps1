@@ -590,19 +590,17 @@ Write-Host "     - Settings > Resources > WSL Integration > Enable Ubuntu-24.04"
 Write-Host ""
 Write-Host "  3. Cloudflare WARP" -ForegroundColor Yellow
 Write-Host "     - Open Cloudflare WARP and configure with the team VPN settings" -ForegroundColor White
+Write-Host "     - Access launcher: https://mvlchain.cloudflareaccess.com/#/Launcher" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  4. Environment Variables" -ForegroundColor Yellow
 Write-Host "     - GITHUB_USERNAME: your GitHub username" -ForegroundColor White
 Write-Host "     - GITHUB_TOKEN: create a PAT with 'repo' + 'read:packages' scopes" -ForegroundColor White
 Write-Host "       https://github.com/settings/tokens" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  5. 1Password" -ForegroundColor Yellow
-Write-Host "     - Open 1Password and sign in to your team vault" -ForegroundColor White
-Write-Host ""
-Write-Host "  6. Slack" -ForegroundColor Yellow
+Write-Host "  5. Slack" -ForegroundColor Yellow
 Write-Host "     - Open Slack and sign in to your workspace" -ForegroundColor White
 Write-Host ""
-Write-Host "  7. IntelliJ IDEA" -ForegroundColor Yellow
+Write-Host "  6. IntelliJ IDEA" -ForegroundColor Yellow
 Write-Host "     - Open IntelliJ and sign in to your JetBrains account" -ForegroundColor White
 Write-Host "     - Open a backend project from ~/backend/ to verify setup" -ForegroundColor White
 Write-Host ""
