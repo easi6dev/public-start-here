@@ -136,6 +136,18 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 
 - **ripgrep, fd, fzf, bat** — Fast search and file tools
 - **zoxide, git-delta, eza, sd** — Terminal productivity tools
 
+## Optional extras
+
+### Mac-style keyboard (Ctrl ↔ Alt swap)
+
+If you're used to Mac keyboard shortcuts (thumb on Command), this swaps Ctrl and Alt via PowerToys:
+
+```powershell
+irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/optional/mac-keyboard.ps1 | iex
+```
+
+After running, restart PowerToys (system tray → right-click → Restart). To undo, open PowerToys > Keyboard Manager > delete all remappings.
+
 ## Manual steps after setup
 
 1. **Set credential environment variables** — `GITHUB_USERNAME`, `GITHUB_TOKEN`
