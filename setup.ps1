@@ -573,12 +573,38 @@ else {
     }
 }
 
-Write-Step "Setup complete!"
 Write-Host ""
-Write-Host "  Remaining manual steps:" -ForegroundColor Magenta
-Write-Host "    1. Reboot if this was your first WSL install, then re-run this script" -ForegroundColor White
-Write-Host "    2. Set credential environment variables (see reminders above)" -ForegroundColor White
-Write-Host "    3. Enable Docker Desktop WSL integration with Ubuntu-24.04" -ForegroundColor White
+Write-Host "============================================" -ForegroundColor Green
+Write-Host "  Setup complete!" -ForegroundColor Green
+Write-Host "============================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "  Things to do manually:" -ForegroundColor Magenta
+Write-Host ""
+Write-Host "  1. Chrome" -ForegroundColor Yellow
+Write-Host "     - Open Chrome and sign in with your Google account" -ForegroundColor White
+Write-Host "     - Set Chrome as your default browser (Settings > Default browser)" -ForegroundColor White
+Write-Host ""
+Write-Host "  2. Docker Desktop" -ForegroundColor Yellow
+Write-Host "     - Open Docker Desktop" -ForegroundColor White
+Write-Host "     - Settings > Resources > WSL Integration > Enable Ubuntu-24.04" -ForegroundColor White
+Write-Host ""
+Write-Host "  3. Cloudflare WARP" -ForegroundColor Yellow
+Write-Host "     - Open Cloudflare WARP and configure with the team VPN settings" -ForegroundColor White
+Write-Host ""
+Write-Host "  4. Environment Variables" -ForegroundColor Yellow
+Write-Host "     - GITHUB_USERNAME: your GitHub username" -ForegroundColor White
+Write-Host "     - GITHUB_TOKEN: create a PAT with 'repo' + 'read:packages' scopes" -ForegroundColor White
+Write-Host "       https://github.com/settings/tokens" -ForegroundColor Gray
+Write-Host ""
+Write-Host "  5. 1Password" -ForegroundColor Yellow
+Write-Host "     - Open 1Password and sign in to your team vault" -ForegroundColor White
+Write-Host ""
+Write-Host "  6. Slack" -ForegroundColor Yellow
+Write-Host "     - Open Slack and sign in to your workspace" -ForegroundColor White
+Write-Host ""
+Write-Host "  7. IntelliJ IDEA" -ForegroundColor Yellow
+Write-Host "     - Open IntelliJ and sign in to your JetBrains account" -ForegroundColor White
+Write-Host "     - Open a backend project from ~/backend/ to verify setup" -ForegroundColor White
 Write-Host ""
 
 } catch {
