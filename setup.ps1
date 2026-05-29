@@ -9,6 +9,11 @@ try {
 
 Set-StrictMode -Version Latest
 
+# --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
+
+$SetupVersion = "2026-05-29.3"
+Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
+
 # --- Admin check ---
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
