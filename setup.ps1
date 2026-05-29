@@ -37,6 +37,14 @@ else {
 
 # --- Mac-style keyboard remapping (early, before reboot) ---
 
+$ptConfigExists = Test-Path "$env:LOCALAPPDATA\Microsoft\PowerToys\Keyboard Manager\default.json"
+$scancodeExists = $null -ne (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Keyboard Layout" -Name "Scancode Map" -ErrorAction SilentlyContinue)
+
+if ($ptConfigExists -and $scancodeExists) {
+    Write-Host "`n    [SKIP] Mac-style keyboard already configured" -ForegroundColor Yellow
+}
+else {
+
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "  Mac-style Keyboard Remapping" -ForegroundColor Cyan
@@ -87,6 +95,8 @@ if ($macKeyboard -eq "y" -or $macKeyboard -eq "Y") {
 else {
     Write-Host "    [SKIP] Keeping default keyboard layout" -ForegroundColor Yellow
 }
+
+} # end of Mac keyboard check
 
 # --- Helpers ---
 
