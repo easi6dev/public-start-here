@@ -1,63 +1,78 @@
 <#
-    Mac-style keyboard remapping via PowerToys Keyboard Manager
-    Swaps Ctrl <-> Alt so you can use your thumb for shortcuts (like Command on Mac)
+    Mac-style keyboard remapping
+    - Ctrl <-> Alt swap via PowerToys Keyboard Manager
+    - Caps Lock -> Korean/English toggle via registry Scancode Map
     Run: irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/optional/mac-keyboard.ps1 | iex
 #>
 
 & {
 try {
 
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "ERROR: Run as Administrator." -ForegroundColor Red
+    return
+}
+
 Write-Host ""
-Write-Host "=== Mac-style Keyboard Setup (PowerToys) ===" -ForegroundColor Cyan
+Write-Host "=== Mac-style Keyboard Setup ===" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "This will remap:" -ForegroundColor White
-Write-Host "  Left Alt  -> Left Ctrl   (thumb for shortcuts)" -ForegroundColor Gray
-Write-Host "  Left Ctrl -> Left Alt" -ForegroundColor Gray
-Write-Host "  Right Alt -> Right Ctrl" -ForegroundColor Gray
-Write-Host "  Right Ctrl -> Right Alt" -ForegroundColor Gray
-Write-Host "  Caps Lock -> IME toggle  (tap to switch Korean/English)" -ForegroundColor Gray
-Write-Host "  Left Alt + Space -> IME toggle" -ForegroundColor Gray
+Write-Host "This will change:" -ForegroundColor White
+Write-Host "  Ctrl <-> Alt swap (PowerToys)" -ForegroundColor Yellow
+Write-Host "    Left Alt  -> Left Ctrl  (thumb for shortcuts)" -ForegroundColor Gray
+Write-Host "    Left Ctrl -> Left Alt" -ForegroundColor Gray
+Write-Host "    Right Alt -> Right Ctrl" -ForegroundColor Gray
+Write-Host "    Right Ctrl -> Right Alt" -ForegroundColor Gray
 Write-Host ""
+Write-Host "  Caps Lock -> Korean/English toggle (registry)" -ForegroundColor Yellow
+Write-Host "    Tap Caps Lock to switch language" -ForegroundColor Gray
+Write-Host "    Original Caps Lock function will be removed" -ForegroundColor Gray
+Write-Host "    Requires reboot to take effect" -ForegroundColor Gray
+Write-Host ""
+
+# --- Ctrl <-> Alt (PowerToys) ---
 
 $ptDir = "$env:LOCALAPPDATA\Microsoft\PowerToys\Keyboard Manager"
-
 if (-not (Test-Path "$env:LOCALAPPDATA\Microsoft\PowerToys")) {
     Write-Host "ERROR: PowerToys is not installed. Run setup.ps1 first." -ForegroundColor Red
     return
 }
-
-if (-not (Test-Path $ptDir)) {
-    New-Item -ItemType Directory -Path $ptDir -Force | Out-Null
-}
+if (-not (Test-Path $ptDir)) { New-Item -ItemType Directory -Path $ptDir -Force | Out-Null }
 
 $config = @{
     remapKeys = @{
         inProcess = @(
-            @{ originalKeys = "164"; newRemapKeys = "162" }  # Left Alt (0xA4) -> Left Ctrl (0xA2)
-            @{ originalKeys = "162"; newRemapKeys = "164" }  # Left Ctrl (0xA2) -> Left Alt (0xA4)
-            @{ originalKeys = "165"; newRemapKeys = "163" }  # Right Alt (0xA5) -> Right Ctrl (0xA3)
-            @{ originalKeys = "163"; newRemapKeys = "165" }  # Right Ctrl (0xA3) -> Right Alt (0xA5)
-            @{ originalKeys = "20"; newRemapKeys = "21" }    # Caps Lock (0x14) -> VK_HANGUL (0x15, 한/영)
+            @{ originalKeys = "164"; newRemapKeys = "162" }
+            @{ originalKeys = "162"; newRemapKeys = "164" }
+            @{ originalKeys = "165"; newRemapKeys = "163" }
+            @{ originalKeys = "163"; newRemapKeys = "165" }
         )
     }
-    remapShortcuts = @{
-        global = @(
-            @{ originalKeys = "164;32"; newRemapKeys = "21" }  # Left Alt + Space -> VK_HANGUL (한/영)
-        )
-        appSpecific = @()
-    }
+    remapShortcuts = @{ global = @(); appSpecific = @() }
 }
+Set-Content -Path "$ptDir\default.json" -Value ($config | ConvertTo-Json -Depth 10) -Encoding UTF8
+Write-Host "[OK] Ctrl <-> Alt swap configured" -ForegroundColor Green
 
-$configJson = $config | ConvertTo-Json -Depth 10
-Set-Content -Path "$ptDir\default.json" -Value $configJson -Encoding UTF8
+# --- Caps Lock -> 한/영 (registry Scancode Map) ---
 
-Write-Host "[OK] Keyboard remapping configured!" -ForegroundColor Green
+$scancodeMap = [byte[]](
+    0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,
+    0x02,0x00,0x00,0x00,
+    0x72,0x00,0x3A,0x00,  # Caps Lock (0x003A) -> Hangul/English (0x0072)
+    0x00,0x00,0x00,0x00
+)
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Keyboard Layout" -Name "Scancode Map" -Value $scancodeMap -Type Binary
+Write-Host "[OK] Caps Lock -> Korean/English toggle configured" -ForegroundColor Green
+
 Write-Host ""
-Write-Host "  Restart PowerToys to apply:" -ForegroundColor Yellow
-Write-Host "  1. Right-click PowerToys in system tray -> Restart" -ForegroundColor White
-Write-Host "  2. Or: Settings > Keyboard Manager > verify the remappings" -ForegroundColor White
+Write-Host "  Next steps:" -ForegroundColor Yellow
+Write-Host "    1. Restart PowerToys (system tray -> right-click -> Restart)" -ForegroundColor White
+Write-Host "    2. Reboot to apply Caps Lock -> Korean/English" -ForegroundColor White
 Write-Host ""
-Write-Host "  To undo: open PowerToys > Keyboard Manager > delete all remappings" -ForegroundColor Gray
+Write-Host "  To undo:" -ForegroundColor Gray
+Write-Host "    Ctrl/Alt: PowerToys > Keyboard Manager > delete all" -ForegroundColor Gray
+Write-Host "    Caps Lock: Run in admin PowerShell:" -ForegroundColor Gray
+Write-Host "      Remove-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Keyboard Layout' -Name 'Scancode Map'" -ForegroundColor Gray
 Write-Host ""
 
 } catch {

@@ -214,6 +214,23 @@ Write-OK "Long Paths disabled (Windows default)"
 Set-ExecutionPolicy Restricted -Scope CurrentUser -Force -ErrorAction SilentlyContinue
 Write-OK "ExecutionPolicy restored to Restricted"
 
+# --- Remove keyboard remapping ---
+
+Write-Step "Removing keyboard remapping"
+$scancodeMap = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Keyboard Layout" -Name "Scancode Map" -ErrorAction SilentlyContinue
+if ($scancodeMap) {
+    Remove-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Keyboard Layout" -Name "Scancode Map" -ErrorAction SilentlyContinue
+    Write-OK "Caps Lock -> Korean/English removed (reboot to apply)"
+}
+else { Write-Skip "No Scancode Map found" }
+
+$ptConfig = "$env:LOCALAPPDATA\Microsoft\PowerToys\Keyboard Manager\default.json"
+if (Test-Path $ptConfig) {
+    Remove-Item $ptConfig -Force
+    Write-OK "PowerToys Ctrl/Alt swap removed"
+}
+else { Write-Skip "No PowerToys keyboard config found" }
+
 # --- Remove git config ---
 
 Write-Step "Removing git global config"

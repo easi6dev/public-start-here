@@ -35,6 +35,59 @@ else {
     Write-Host "    [OK] ExecutionPolicy set to RemoteSigned" -ForegroundColor Green
 }
 
+# --- Mac-style keyboard remapping (early, before reboot) ---
+
+Write-Host ""
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host "  Mac-style Keyboard Remapping" -ForegroundColor Cyan
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  This will change your keyboard layout to:" -ForegroundColor White
+Write-Host ""
+Write-Host "    Ctrl <-> Alt swap" -ForegroundColor Yellow
+Write-Host "      Left Alt  -> Left Ctrl  (thumb for shortcuts, like Command)" -ForegroundColor Gray
+Write-Host "      Left Ctrl -> Left Alt" -ForegroundColor Gray
+Write-Host "      Right Alt -> Right Ctrl" -ForegroundColor Gray
+Write-Host "      Right Ctrl -> Right Alt" -ForegroundColor Gray
+Write-Host ""
+Write-Host "    Caps Lock -> Language toggle (Korean/English)" -ForegroundColor Yellow
+Write-Host "      Tap Caps Lock to switch between Korean and English" -ForegroundColor Gray
+Write-Host "      (original Caps Lock function will be removed)" -ForegroundColor Gray
+Write-Host ""
+$macKeyboard = Read-Host "  Apply Mac-style keyboard? (y/N)"
+if ($macKeyboard -eq "y" -or $macKeyboard -eq "Y") {
+    # Ctrl <-> Alt via PowerToys Keyboard Manager
+    $ptDir = "$env:LOCALAPPDATA\Microsoft\PowerToys\Keyboard Manager"
+    if (-not (Test-Path $ptDir)) { New-Item -ItemType Directory -Path $ptDir -Force | Out-Null }
+    $ptConfig = @{
+        remapKeys = @{
+            inProcess = @(
+                @{ originalKeys = "164"; newRemapKeys = "162" }
+                @{ originalKeys = "162"; newRemapKeys = "164" }
+                @{ originalKeys = "165"; newRemapKeys = "163" }
+                @{ originalKeys = "163"; newRemapKeys = "165" }
+            )
+        }
+        remapShortcuts = @{ global = @(); appSpecific = @() }
+    }
+    Set-Content -Path "$ptDir\default.json" -Value ($ptConfig | ConvertTo-Json -Depth 10) -Encoding UTF8
+    Write-Host "    [OK] Ctrl <-> Alt swap configured (PowerToys)" -ForegroundColor Green
+
+    # Caps Lock -> 한/영 via registry Scancode Map (kernel level, needs reboot)
+    $scancodeMap = [byte[]](
+        0x00,0x00,0x00,0x00,  # Header (version)
+        0x00,0x00,0x00,0x00,  # Header (flags)
+        0x02,0x00,0x00,0x00,  # Number of entries (1 mapping + null terminator)
+        0x72,0x00,0x3A,0x00,  # Caps Lock (0x003A) -> Hangul/English (0x0072)
+        0x00,0x00,0x00,0x00   # Null terminator
+    )
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Keyboard Layout" -Name "Scancode Map" -Value $scancodeMap -Type Binary
+    Write-Host "    [OK] Caps Lock -> Korean/English toggle configured (active after reboot)" -ForegroundColor Green
+}
+else {
+    Write-Host "    [SKIP] Keeping default keyboard layout" -ForegroundColor Yellow
+}
+
 # --- Helpers ---
 
 function Write-Step {
