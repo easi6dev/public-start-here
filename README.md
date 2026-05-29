@@ -21,7 +21,7 @@ Windows PC setup automation for TADA backend developers.
 2. Paste this and press Enter:
 
 ```powershell
-irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1 | iex
+irm "https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1?t=$(Get-Random)" | iex
 ```
 
 3. The script will install everything automatically. When it's done, it will ask you to **reboot**.
@@ -39,7 +39,7 @@ The hard part is done! All your apps and tools are already installed. Now we jus
 2. Paste the **same command** again:
 
 ```powershell
-irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1 | iex
+irm "https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1?t=$(Get-Random)" | iex
 ```
 
 3. Don't worry — everything already installed will be **skipped automatically**. Only these remain:
@@ -56,7 +56,7 @@ irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1 
 To undo everything and start fresh:
 
 ```powershell
-irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1 | iex
+irm "https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1?t=$(Get-Random)" | iex
 ```
 
 ---
@@ -155,7 +155,7 @@ If you're used to Mac keyboard shortcuts, this configures PowerToys to:
 - **Left Alt + Space → 한/영** — Mac-style IME toggle
 
 ```powershell
-irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/optional/mac-keyboard.ps1 | iex
+irm "https://raw.githubusercontent.com/easi6dev/public-start-here/main/optional/mac-keyboard.ps1?t=$(Get-Random)" | iex
 ```
 
 After running, restart PowerToys (system tray → right-click → Restart). To undo, open PowerToys > Keyboard Manager > delete all remappings.

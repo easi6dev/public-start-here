@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-05-29.3"
+$SetupVersion = "2026-05-29.4"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -666,7 +666,7 @@ if ($needsReboot) {
     Write-Host "    Then open PowerShell as Admin and run the" -ForegroundColor White
     Write-Host "    same command again:" -ForegroundColor White
     Write-Host ""
-    Write-Host "    irm https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1 | iex" -ForegroundColor Green
+    Write-Host '    irm "https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1?t=$(Get-Random)" | iex' -ForegroundColor Green
     Write-Host ""
     Write-Host "    Already-installed items will be skipped." -ForegroundColor Gray
     Write-Host "    Only WSL services + repo cloning will run." -ForegroundColor Gray
