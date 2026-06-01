@@ -71,21 +71,35 @@ fi
 # --- APT install ---
 
 step "Installing packages via apt"
-sudo apt update -y
 
-# Erlang
-sudo apt install -y \
-    erlang-base erlang-asn1 erlang-crypto erlang-eldap erlang-ftp erlang-inets \
-    erlang-mnesia erlang-os-mon erlang-parsetools erlang-public-key \
-    erlang-runtime-tools erlang-snmp erlang-ssl \
+# Idempotency guard: skip apt update + install when every package is already present.
+# dpkg -s is read-only; skipping only avoids a network round-trip and (intentionally) any
+# version upgrades on re-runs, which matches the rest of this script's check-then-skip style.
+# If ANY package is missing we fall through to the original install path unchanged.
+ERLANG_PKGS=(
+    erlang-base erlang-asn1 erlang-crypto erlang-eldap erlang-ftp erlang-inets
+    erlang-mnesia erlang-os-mon erlang-parsetools erlang-public-key
+    erlang-runtime-tools erlang-snmp erlang-ssl
     erlang-syntax-tools erlang-tftp erlang-tools erlang-xmerl
-
-# Services + utilities
-sudo apt install -y --fix-missing \
-    mongodb-org rabbitmq-server postgresql-16 postgresql-16-postgis-3 redis-server \
+)
+SERVICE_PKGS=(
+    mongodb-org rabbitmq-server postgresql-16 postgresql-16-postgis-3 redis-server
     unzip jq git openjdk-21-jdk build-essential zsh
+)
 
-ok "APT packages installed"
+apt_all_installed=true
+for pkg in "${ERLANG_PKGS[@]}" "${SERVICE_PKGS[@]}"; do
+    if ! dpkg -s "$pkg" >/dev/null 2>&1; then apt_all_installed=false; break; fi
+done
+
+if $apt_all_installed; then
+    skip "All apt packages already installed"
+else
+    sudo apt update -y
+    sudo apt install -y "${ERLANG_PKGS[@]}"
+    sudo apt install -y --fix-missing "${SERVICE_PKGS[@]}"
+    ok "APT packages installed"
+fi
 
 # --- Start PostgreSQL before configuring it ---
 

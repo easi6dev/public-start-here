@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-06-01.5"
+$SetupVersion = "2026-06-01.6"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -624,7 +624,7 @@ if ($null -ne $longPaths -and $longPaths.PSObject.Properties["LongPathsEnabled"]
 # Win11 22H2+ WT is the default terminal, so standalone PowerShell/WSL windows inherit
 # it too. Git Bash (mintty) is its own emulator and is intentionally out of scope.
 
-Write-Step "Configuring Windows Terminal Shift+Enter binding"
+Write-Step "Configuring Windows Terminal (default profile + Shift+Enter)"
 $wtDir      = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState"
 $wtSettings = Join-Path $wtDir "settings.json"
 if (-not (Test-Path $wtDir)) {
@@ -640,7 +640,33 @@ if (-not (Test-Path $wtDir)) {
             ConvertFrom-Jsonc ([System.IO.File]::ReadAllText($wtSettings))
         } else { [pscustomobject]@{} }
 
-        # Detect an existing binding in BOTH arrays: WT auto-migrates an inline
+        $changed = $false
+
+        # Default profile -> PowerShell 7, so Win+X > Terminal / Terminal (Admin) opens pwsh7
+        # instead of Windows PowerShell 5.1. Discover the pwsh profile's ACTUAL guid from the
+        # PowershellCore generator entry rather than hardcoding it: that generated UUIDv5 differs
+        # for Store/MSIX, Preview, or non-default-path installs. Fall back to the well-known guid
+        # of the standard winget install only when WT hasn't generated the profile list yet.
+        # 'profiles' is either an object with a 'list' (current schema) or a bare array (legacy);
+        # all property probes are StrictMode-guarded.
+        $profileList = if ($json.PSObject.Properties['profiles']) {
+            if ($json.profiles -is [System.Management.Automation.PSCustomObject] -and $json.profiles.PSObject.Properties['list']) { $json.profiles.list }
+            else { $json.profiles }
+        } else { @() }
+        $pwshProfile = @($profileList) | Where-Object {
+            $null -ne $_ -and $_.PSObject.Properties['source'] -and $_.source -eq 'Windows.Terminal.PowershellCore'
+        } | Select-Object -First 1
+        $pwsh7Guid = if ($pwshProfile -and $pwshProfile.PSObject.Properties['guid']) { $pwshProfile.guid } else { '{574e775e-4f2a-5b96-ac1e-a2962a402336}' }
+        $curDefault = if ($json.PSObject.Properties['defaultProfile']) { $json.defaultProfile } else { $null }
+        if ($curDefault -eq $pwsh7Guid) {
+            Write-Skip "Default profile already PowerShell 7"
+        } else {
+            $json | Add-Member -NotePropertyName defaultProfile -NotePropertyValue $pwsh7Guid -Force
+            $changed = $true
+            Write-OK "Default profile set to PowerShell 7 ($pwsh7Guid)"
+        }
+
+        # Detect an existing Shift+Enter binding in BOTH arrays: WT auto-migrates an inline
         # {command, keys} entry into actions[] (command) + keybindings[] (keys on re-save),
         # so checking only one array would let the binding be added twice on re-runs.
         # Guard property access: under StrictMode, reading $e.keys on an actions[] entry
@@ -665,11 +691,15 @@ if (-not (Test-Path $wtDir)) {
                 keys    = 'shift+enter'
             }
             $json.actions = @($json.actions) + $binding
+            $changed = $true
+            Write-OK "Shift+Enter -> newline binding added"
+        }
+
+        if ($changed) {
             # -Depth 32: the default of 2 truncates the nested profiles tree and corrupts
             # the file. WriteAllText with a BOM-less UTF-8 encoder per WT's requirement.
             $out = $json | ConvertTo-Json -Depth 32
             [System.IO.File]::WriteAllText($wtSettings, $out, (New-Object System.Text.UTF8Encoding $false))
-            Write-OK "Shift+Enter -> newline binding added"
         }
     } catch { Write-Warn "Could not update Windows Terminal settings: $_" }
 }
@@ -890,6 +920,11 @@ else {
         # Identity is the only part of .gitconfig safe to share across OSes, so we set the
         # same value in each side's own config rather than symlinking the whole file.
         Write-Step "Configuring git identity"
+        # Read native git/gh output as UTF-8. Windows PowerShell 5.1 decodes native stdout with
+        # the OEM code page by default, so a non-ASCII name (e.g. Korean) gets mojibake'd in the
+        # [default] prompt preview. Save/restore so later native-output parsing is unaffected.
+        $prevOutEnc = [Console]::OutputEncoding
+        try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch {}
         $gitName  = git config --global user.name  2>$null
         $gitEmail = git config --global user.email 2>$null
         if ($gitName -and $gitEmail) {
@@ -908,6 +943,7 @@ else {
             $defName  = if ($ghName)  { $ghName }  else { $gitName }
             $defEmail = if ($ghEmail) { $ghEmail } else { $gitEmail }
 
+            Write-Host "    Tip: use a non-Korean (English / romanized) name for the git author." -ForegroundColor DarkGray
             $nPrompt = if ($defName) { "    git user.name [$defName]" } else { "    git user.name" }
             $inName  = (Read-Host $nPrompt).Trim()
             if (-not $inName) { $inName = $defName }
@@ -922,8 +958,14 @@ else {
             Write-OK "git identity set on Windows (name='$gitName', email='$gitEmail')"
         }
 
+        try { [Console]::OutputEncoding = $prevOutEnc } catch {}
+
         # Mirror the resolved identity into WSL's own ~/.gitconfig (git installed in Phase 2).
         # Always run so a previously Windows-only config still propagates to WSL on re-runs.
+        # The first wsl.exe call can cold-start the WSL VM (~10-30s) and look frozen, so warn.
+        if ($gitName -or $gitEmail) {
+            Write-Host "    Mirroring identity to WSL - first WSL launch may take 10-30s, please wait (do not close) ..." -ForegroundColor Gray
+        }
         if ($gitName)  { wsl -d Ubuntu-24.04 -u $wslUser -- git config --global user.name  "$gitName"  2>$null }
         if ($gitEmail) { wsl -d Ubuntu-24.04 -u $wslUser -- git config --global user.email "$gitEmail" 2>$null }
         if ($gitName -and $gitEmail) { Write-OK "git identity mirrored to WSL user '$wslUser'" }
