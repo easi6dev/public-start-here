@@ -528,6 +528,42 @@ else
     skip "zsh is already the default shell"
 fi
 
+# --- Fork command-line launcher (WSL side) ---
+# `fork` / `fork <path>` launches the Windows Fork GUI on the given dir (default: current).
+# wslpath -w turns both /mnt/c paths and native Linux paths (-> \\wsl.localhost\...) into a
+# path Fork can open. The Windows username is baked in now (avoids a cmd.exe call per shell).
+# Lives in its own ~/.fork.sh sourced by both rc files, so there's a single definition.
+
+step "Configuring Fork command-line launcher"
+
+FORK_SH="$HOME/.fork.sh"
+{
+    echo "# Managed by setup-wsl.sh — open Fork (Windows GUI) at a path. Do not edit."
+    echo "FORK_WIN_USER='$WIN_USER'"
+    cat <<'FORKEOF'
+fork() {
+    local target="${1:-.}"
+    local abs
+    abs="$(cd "$target" 2>/dev/null && pwd)" || { echo "fork: no such directory: $1" >&2; return 1; }
+    local base="/mnt/c/Users/$FORK_WIN_USER/AppData/Local/Fork"
+    local exe="$base/current/Fork.exe"
+    [ -x "$exe" ] || exe="$base/Fork.exe"
+    [ -x "$exe" ] || { echo "fork: Fork.exe not found under $base" >&2; return 1; }
+    "$exe" "$(wslpath -w "$abs")"
+}
+FORKEOF
+} > "$FORK_SH"
+ok "Wrote $FORK_SH"
+
+for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    if [ -f "$rc" ] && ! grep -q '\.fork\.sh' "$rc"; then
+        printf '\n# Fork CLI launcher\n[ -f "$HOME/.fork.sh" ] && . "$HOME/.fork.sh"\n' >> "$rc"
+        ok "Sourced .fork.sh from $(basename "$rc")"
+    else
+        skip ".fork.sh already sourced from $(basename "$rc")"
+    fi
+done
+
 # --- Start services ---
 
 step "Starting services"

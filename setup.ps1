@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-06-01.4"
+$SetupVersion = "2026-06-01.5"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -490,6 +490,52 @@ if ($newMd -ceq $existingMd) {
 } else {
     [System.IO.File]::WriteAllText($claudeMdPath, $newMd, $utf8NoBom)
     Write-OK "Team defaults written to $claudeMdPath"
+}
+
+# Fork command-line launcher (Windows PowerShell side)
+# `fork` / `fork <path>` opens the Fork GUI on the given dir (default: current). Fork.exe
+# takes the repo path as a positional arg. The exe lives under ...\Fork\current\ (Velopack
+# layout) with a root fallback. Managed block markers keep re-runs idempotent and preserve
+# any user-authored profile content outside them. WSL gets its own `fork` in setup-wsl.sh.
+Write-Step "Configuring Fork command-line launcher (PowerShell)"
+
+$forkFnStart = "# TADA-FORK-CLI:START (managed by setup.ps1 - do not edit inside)"
+$forkFnEnd   = "# TADA-FORK-CLI:END"
+$forkFnBody = @'
+function fork {
+    [CmdletBinding()]
+    param([Parameter(ValueFromRemainingArguments = $true)] [string[]] $Paths)
+    $exe = "$env:LOCALAPPDATA\Fork\current\Fork.exe"
+    if (-not (Test-Path $exe)) { $exe = "$env:LOCALAPPDATA\Fork\Fork.exe" }
+    if (-not (Test-Path $exe)) { Write-Error "fork: Fork.exe not found under $env:LOCALAPPDATA\Fork"; return }
+    $target = if ($Paths) { $Paths[0] } else { '.' }
+    $r = Resolve-Path -LiteralPath $target -ErrorAction SilentlyContinue
+    & $exe ($(if ($r) { $r.Path } else { $target }))
+}
+'@ -replace "`r`n", "`n"
+$forkBlock = "$forkFnStart`n$forkFnBody`n$forkFnEnd"
+
+# Both PowerShell 7 and Windows PowerShell 5.1 profiles. GetFolderPath handles a Documents
+# folder redirected to OneDrive.
+$docs = [Environment]::GetFolderPath('MyDocuments')
+$profilePaths = @(
+    (Join-Path $docs "PowerShell\Microsoft.PowerShell_profile.ps1"),
+    (Join-Path $docs "WindowsPowerShell\Microsoft.PowerShell_profile.ps1")
+)
+$forkPattern = '# TADA-FORK-CLI:START[\s\S]*?# TADA-FORK-CLI:END'
+foreach ($pf in $profilePaths) {
+    $pfDir = Split-Path $pf -Parent
+    if (-not (Test-Path $pfDir)) { New-Item -ItemType Directory -Path $pfDir -Force | Out-Null }
+    $existingPf = if (Test-Path $pf) { [System.IO.File]::ReadAllText($pf) -replace "`r`n", "`n" } else { "" }
+    $cleanedPf = ([regex]::Replace($existingPf, $forkPattern, "")).TrimEnd()
+    $newPf = if ($cleanedPf) { "$cleanedPf`n`n$forkBlock`n" } else { "$forkBlock`n" }
+    $edition = Split-Path $pfDir -Leaf
+    if ($newPf -ceq $existingPf) {
+        Write-Skip "fork launcher already in $edition profile"
+    } else {
+        [System.IO.File]::WriteAllText($pf, $newPf, $utf8NoBom)
+        Write-OK "fork launcher added to $edition profile"
+    }
 }
 
 # Flipper (mobile debugging, browser-based)
