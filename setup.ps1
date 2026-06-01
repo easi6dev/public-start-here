@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-06-01.1"
+$SetupVersion = "2026-06-01.3"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -91,6 +91,21 @@ function Install-WingetPackage {
 function Clean-WslOutput {
     param([object]$RawOutput)
     ($RawOutput | Out-String) -replace "`0","" | ForEach-Object { $_.Trim() }
+}
+
+# Parse JSON that may contain // or /* */ comments and trailing commas (e.g. Windows
+# Terminal's default settings.json is JSONC). Windows PowerShell 5.1's ConvertFrom-Json
+# throws on comments, so strip them first. The regex matches a whole JSON string as group 1
+# BEFORE trying a comment, so "https://..." inside a value is never mistaken for a comment.
+function ConvertFrom-Jsonc {
+    param([string]$Text)
+    $stripped = [regex]::Replace(
+        $Text,
+        '("(?:\\.|[^"\\])*")|//[^\r\n]*|/\*[\s\S]*?\*/',
+        { param($m) if ($m.Groups[1].Success) { $m.Groups[1].Value } else { '' } }
+    )
+    $stripped = [regex]::Replace($stripped, ',(\s*[}\]])', '$1')
+    $stripped | ConvertFrom-Json
 }
 
 # --- Phase 1: Windows Apps (winget) ---
@@ -308,33 +323,13 @@ if ($existingSh -ceq $statusLineScript) {
     Write-OK "statusline-command.sh written to $statusLinePath"
 }
 
-# Resolve Git Bash absolute path — a bare 'bash' may resolve to WSL on a fresh PC,
-# which cannot run a Windows-path script.
-$bashExe = $null
-$gitCmd = Get-Command git.exe -ErrorAction SilentlyContinue
-if ($gitCmd) {
-    $gitRoot = Split-Path (Split-Path $gitCmd.Source)   # <root>\cmd\git.exe -> <root>
-    $candidate = Join-Path $gitRoot "bin\bash.exe"
-    if (Test-Path $candidate) { $bashExe = $candidate }
-}
-if (-not $bashExe) {
-    foreach ($p in @(
-        "$env:ProgramFiles\Git\bin\bash.exe",
-        "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
-        "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
-    )) {
-        if ($p -and (Test-Path $p)) { $bashExe = $p; break }
-    }
-}
-
-$shPathForward = $statusLinePath -replace '\\', '/'
-if ($bashExe) {
-    $bashForward = $bashExe -replace '\\', '/'
-    $statusLineCommand = "`"$bashForward`" `"$shPathForward`""
-} else {
-    Write-Warn "Git Bash not found — statusLine will use bare 'bash' (may need a manual fix)"
-    $statusLineCommand = "bash `"$shPathForward`""
-}
+# Claude Code runs the statusLine command THROUGH Git Bash on Windows (it auto-detects
+# Git Bash), so just invoke `bash`. Do NOT embed an absolute
+# "C:/Program Files/Git/bin/bash.exe" path: the space in "Program Files" gets mis-split
+# when Claude Code re-parses the command for `bash -c`, and bash exits 126 (cannot execute)
+# -> blank status line. A bare `bash` (no spaces, resolved on Git Bash's own PATH) plus a
+# $HOME-relative script path sidesteps the space entirely and is user-agnostic.
+$statusLineCommand = 'bash "$HOME/.claude/statusline-command.sh"'
 
 # Merge statusLine into settings.json without clobbering existing settings
 $settingsPath = Join-Path $claudeDir "settings.json"
@@ -577,9 +572,12 @@ if (-not (Test-Path $wtDir)) {
 } else {
     try {
         # Missing file = WT never launched; an empty object is a valid partial settings
-        # file that WT layers over its built-in defaults.
+        # file that WT layers over its built-in defaults. Use ConvertFrom-Jsonc: WT's
+        # default settings.json is JSONC (comments + trailing commas) and plain
+        # ConvertFrom-Json throws on it under Windows PowerShell 5.1, which previously made
+        # this whole step fail silently (caught below) so the binding was never written.
         $json = if (Test-Path $wtSettings) {
-            [System.IO.File]::ReadAllText($wtSettings) | ConvertFrom-Json
+            ConvertFrom-Jsonc ([System.IO.File]::ReadAllText($wtSettings))
         } else { [pscustomobject]@{} }
 
         # Detect an existing binding in BOTH arrays: WT auto-migrates an inline
