@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-06-01.6"
+$SetupVersion = "2026-06-01.7"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -535,6 +535,42 @@ foreach ($pf in $profilePaths) {
     } else {
         [System.IO.File]::WriteAllText($pf, $newPf, $utf8NoBom)
         Write-OK "fork launcher added to $edition profile"
+    }
+}
+
+# zoxide shell init (PowerShell side)
+# zoxide exposes ONLY a `zoxide` binary on PATH; the `z` / `zi` commands are functions that
+# `zoxide init` generates at shell startup. Without this line in the profile, `z` doesn't
+# exist (the exact symptom: "z: The term 'z' is not recognized..."). Running `zoxide init`
+# every startup (vs. baking its output) keeps it pinned to the installed zoxide version.
+# Guarded by Get-Command so a profile on a machine without zoxide doesn't error on launch.
+# Managed-block markers + strip-then-append make re-runs idempotent and preserve user content.
+# Reuses $docs / $profilePaths / $utf8NoBom from the Fork launcher step above. WSL gets its
+# own zoxide init in setup-wsl.sh.
+Write-Step "Configuring zoxide shell init (PowerShell)"
+
+$zoxideStart = "# TADA-ZOXIDE-INIT:START (managed by setup.ps1 - do not edit inside)"
+$zoxideEnd   = "# TADA-ZOXIDE-INIT:END"
+$zoxideBody = @'
+if (Get-Command zoxide -ErrorAction SilentlyContinue) {
+    Invoke-Expression (& { (zoxide init powershell | Out-String) })
+}
+'@ -replace "`r`n", "`n"
+$zoxideBlock = "$zoxideStart`n$zoxideBody`n$zoxideEnd"
+
+$zoxidePattern = '# TADA-ZOXIDE-INIT:START[\s\S]*?# TADA-ZOXIDE-INIT:END'
+foreach ($pf in $profilePaths) {
+    $pfDir = Split-Path $pf -Parent
+    if (-not (Test-Path $pfDir)) { New-Item -ItemType Directory -Path $pfDir -Force | Out-Null }
+    $existingPf = if (Test-Path $pf) { [System.IO.File]::ReadAllText($pf) -replace "`r`n", "`n" } else { "" }
+    $cleanedPf = ([regex]::Replace($existingPf, $zoxidePattern, "")).TrimEnd()
+    $newPf = if ($cleanedPf) { "$cleanedPf`n`n$zoxideBlock`n" } else { "$zoxideBlock`n" }
+    $edition = Split-Path $pfDir -Leaf
+    if ($newPf -ceq $existingPf) {
+        Write-Skip "zoxide init already in $edition profile"
+    } else {
+        [System.IO.File]::WriteAllText($pf, $newPf, $utf8NoBom)
+        Write-OK "zoxide init added to $edition profile"
     }
 }
 
