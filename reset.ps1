@@ -64,7 +64,10 @@ Write-Host "  - Service port environment variables" -ForegroundColor White
 Write-Host "  - .wslconfig" -ForegroundColor White
 Write-Host "  - sd, ktlint local installs" -ForegroundColor White
 Write-Host "  - Claude Code" -ForegroundColor White
-Write-Host "  - git global config (autocrlf, eol)" -ForegroundColor White
+Write-Host "  - git global config (autocrlf, eol, delta pager)" -ForegroundColor White
+Write-Host "  - fork/zoxide shell launchers (PowerShell, Git Bash, WSL)" -ForegroundColor White
+Write-Host "  - CLAUDE.md team-defaults block (your own content kept)" -ForegroundColor White
+Write-Host "  - Windows Terminal default profile + Shift+Enter binding" -ForegroundColor White
 Write-Host "  - ~/backend/ directory (all cloned repos)" -ForegroundColor White
 Write-Host "  - WSL Ubuntu-24.04 (optional, will ask)" -ForegroundColor White
 Write-Host ""
@@ -205,6 +208,95 @@ if ($wslOk) {
 }
 else { Write-Skip "WSL Ubuntu-24.04 not ready — skipped WSL statusLine cleanup" }
 
+# --- Remove fork/zoxide launchers + CLAUDE.md team defaults (Windows) ---
+# Mirror of setup.ps1: strip the managed blocks it wrote into the PowerShell profiles and the
+# user CLAUDE.md, and delete the Git Bash fork launcher. The marker-bounded strips preserve any
+# content the user added outside the markers.
+
+Write-Step "Removing fork/zoxide launchers and CLAUDE.md team defaults (Windows)"
+
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+
+# PowerShell profiles (PS7 + 5.1): strip fork + zoxide blocks. Delete a profile only if it is
+# empty afterwards (setup may have created it solely to hold these blocks).
+$docs = [Environment]::GetFolderPath('MyDocuments')
+$profilePaths = @(
+    (Join-Path $docs "PowerShell\Microsoft.PowerShell_profile.ps1"),
+    (Join-Path $docs "WindowsPowerShell\Microsoft.PowerShell_profile.ps1")
+)
+$managedPatterns = @(
+    '# TADA-FORK-CLI:START[\s\S]*?# TADA-FORK-CLI:END',
+    '# TADA-ZOXIDE-INIT:START[\s\S]*?# TADA-ZOXIDE-INIT:END'
+)
+foreach ($pf in $profilePaths) {
+    $edition = Split-Path (Split-Path $pf -Parent) -Leaf
+    if (-not (Test-Path $pf)) { Write-Skip "no $edition profile"; continue }
+    $content = [System.IO.File]::ReadAllText($pf) -replace "`r`n", "`n"
+    $cleaned = $content
+    foreach ($pat in $managedPatterns) { $cleaned = [regex]::Replace($cleaned, $pat, "") }
+    $cleaned = $cleaned.TrimEnd()
+    if ($cleaned -ceq $content.TrimEnd()) {
+        Write-Skip "no managed blocks in $edition profile"
+    }
+    elseif ($cleaned -eq "") {
+        Remove-Item $pf -Force
+        Write-OK "removed empty $edition profile (only held managed blocks)"
+    }
+    else {
+        [System.IO.File]::WriteAllText($pf, "$cleaned`n", $utf8NoBom)
+        Write-OK "stripped fork/zoxide blocks from $edition profile"
+    }
+}
+
+# ~/.claude/CLAUDE.md: strip only the team-defaults block; always keep the rest.
+$claudeMdPath = Join-Path $claudeDir "CLAUDE.md"
+if (Test-Path $claudeMdPath) {
+    $md = [System.IO.File]::ReadAllText($claudeMdPath) -replace "`r`n", "`n"
+    $mdClean = ([regex]::Replace($md, '<!-- TADA-TEAM-DEFAULTS:START[\s\S]*?TADA-TEAM-DEFAULTS:END -->', "")).TrimEnd()
+    if ($mdClean -ceq $md.TrimEnd()) {
+        Write-Skip "no team-defaults block in CLAUDE.md"
+    }
+    else {
+        [System.IO.File]::WriteAllText($claudeMdPath, "$mdClean`n", $utf8NoBom)
+        Write-OK "team-defaults block removed from CLAUDE.md (your content kept)"
+    }
+}
+else { Write-Skip "CLAUDE.md not found" }
+
+# Git Bash fork launcher (~/bin/fork) written by setup.ps1
+$gitBashFork = Join-Path $env:USERPROFILE "bin\fork"
+if (Test-Path $gitBashFork) {
+    Remove-Item $gitBashFork -Force
+    Write-OK "removed Git Bash launcher $gitBashFork"
+}
+else { Write-Skip "Git Bash fork launcher not found" }
+
+# --- Remove WSL fork/zoxide launchers + git delta config (mirror of setup-wsl.sh) ---
+# Reuses $wslOk from the statusLine cleanup above. Drops ~/.fork.sh and its source lines from
+# .bashrc/.zshrc, the zoxide init from .zshrc, and the delta pager keys from WSL's git config.
+
+Write-Step "Removing WSL fork/zoxide launchers and git delta config"
+
+if ($wslOk) {
+    wsl -d Ubuntu-24.04 -- bash -lc '
+rm -f "$HOME/.fork.sh"
+for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    [ -f "$rc" ] || continue
+    sed -i -e "/# Fork CLI launcher/d" -e "/\.fork\.sh/d" "$rc"
+done
+if [ -f "$HOME/.zshrc" ]; then
+    sed -i -e "/# zoxide (smart cd, fasd replacement)/d" -e "/zoxide init zsh/d" "$HOME/.zshrc"
+fi
+if command -v git >/dev/null 2>&1; then
+    for k in core.pager interactive.diffFilter delta.navigate delta.line-numbers alias.rawdiff; do
+        git config --global --unset "$k" 2>/dev/null || true
+    done
+fi
+' 2>&1 | Out-Null
+    Write-OK "WSL ~/.fork.sh, zoxide init, and git delta config removed"
+}
+else { Write-Skip "WSL Ubuntu-24.04 not ready — skipped WSL launcher cleanup" }
+
 # --- Remove environment variables (service ports) ---
 
 Write-Step "Removing service port environment variables"
@@ -289,13 +381,90 @@ if (Test-Path $ptConfig) {
 }
 else { Write-Skip "No PowerToys keyboard config found" }
 
+# --- Restore Windows Terminal defaults (defaultProfile + Shift+Enter) ---
+# setup.ps1 set defaultProfile to PowerShell 7 and added a Shift+Enter -> newline binding, but
+# did NOT back up the original defaultProfile. So undo only our own changes: remove the
+# Shift+Enter binding, and clear defaultProfile only when it still points at the pwsh7 profile
+# (don't clobber a deliberate user choice). WT then falls back to its built-in default.
+
+Write-Step "Restoring Windows Terminal settings"
+
+# WT settings.json is JSONC; PS 5.1's ConvertFrom-Json chokes on comments/trailing commas.
+function ConvertFrom-Jsonc {
+    param([string]$Text)
+    $stripped = [regex]::Replace(
+        $Text,
+        '("(?:\\.|[^"\\])*")|//[^\r\n]*|/\*[\s\S]*?\*/',
+        { param($m) if ($m.Groups[1].Success) { $m.Groups[1].Value } else { '' } }
+    )
+    $stripped = [regex]::Replace($stripped, ',(\s*[}\]])', '$1')
+    $stripped | ConvertFrom-Json
+}
+
+$wtSettings = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+if (-not (Test-Path $wtSettings)) {
+    Write-Skip "Windows Terminal settings.json not found"
+}
+else {
+    try {
+        $json = ConvertFrom-Jsonc ([System.IO.File]::ReadAllText($wtSettings))
+        $changed = $false
+
+        # Clear defaultProfile only if it points at the PowerShell 7 (PowershellCore) profile.
+        $profileList = if ($json.PSObject.Properties['profiles']) {
+            if ($json.profiles -is [System.Management.Automation.PSCustomObject] -and $json.profiles.PSObject.Properties['list']) { $json.profiles.list }
+            else { $json.profiles }
+        } else { @() }
+        $pwshProfile = @($profileList) | Where-Object {
+            $null -ne $_ -and $_.PSObject.Properties['source'] -and $_.source -eq 'Windows.Terminal.PowershellCore'
+        } | Select-Object -First 1
+        $pwsh7Guid = if ($pwshProfile -and $pwshProfile.PSObject.Properties['guid']) { $pwshProfile.guid } else { '{574e775e-4f2a-5b96-ac1e-a2962a402336}' }
+        if ($json.PSObject.Properties['defaultProfile'] -and $json.defaultProfile -eq $pwsh7Guid) {
+            $json.PSObject.Properties.Remove('defaultProfile')
+            $changed = $true
+            Write-OK "defaultProfile cleared (was PowerShell 7 -> WT built-in default)"
+        }
+        else { Write-Skip "defaultProfile not pwsh7 - left as-is" }
+
+        # Remove the Shift+Enter binding (inline {keys,command} form and the migrated form).
+        $esc = [char]27
+        $bindingRemoved = $false
+        foreach ($k in @('actions','keybindings')) {
+            if ($json.PSObject.Properties[$k]) {
+                $orig = @($json.$k)
+                $kept = @($orig | Where-Object {
+                    $e = $_
+                    if ($null -eq $e) { return $false }
+                    $isKeys = $e.PSObject.Properties['keys'] -and $e.keys -eq 'shift+enter'
+                    $isCmd  = $e.PSObject.Properties['command'] -and ($e.command -is [System.Management.Automation.PSCustomObject]) -and $e.command.PSObject.Properties['action'] -and $e.command.action -eq 'sendInput' -and $e.command.PSObject.Properties['input'] -and $e.command.input -eq ($esc + "`r")
+                    -not ($isKeys -or $isCmd)
+                })
+                if ($kept.Count -ne $orig.Count) { $json.$k = $kept; $changed = $true; $bindingRemoved = $true }
+            }
+        }
+        if ($bindingRemoved) { Write-OK "Shift+Enter -> newline binding removed" }
+
+        if ($changed) {
+            $out = $json | ConvertTo-Json -Depth 32
+            [System.IO.File]::WriteAllText($wtSettings, $out, (New-Object System.Text.UTF8Encoding $false))
+            Write-OK "Windows Terminal settings.json updated"
+        }
+        else { Write-Skip "No setup-added Windows Terminal changes found" }
+    }
+    catch { Write-Warn "Could not update Windows Terminal settings: $_" }
+}
+
 # --- Remove git config ---
 
 Write-Step "Removing git global config"
 if (Get-Command git -ErrorAction SilentlyContinue) {
     git config --global --unset core.autocrlf 2>&1 | Out-Null
     git config --global --unset core.eol 2>&1 | Out-Null
-    Write-OK "git config (autocrlf, eol) removed"
+    # delta pager config + rawdiff alias written by setup.ps1
+    foreach ($k in @("core.pager", "interactive.diffFilter", "delta.navigate", "delta.line-numbers", "alias.rawdiff")) {
+        git config --global --unset $k 2>&1 | Out-Null
+    }
+    Write-OK "git config (autocrlf, eol, delta pager + rawdiff alias) removed"
 }
 else { Write-Skip "git not installed" }
 
