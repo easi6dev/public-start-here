@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-06-01.3"
+$SetupVersion = "2026-06-01.4"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -149,14 +149,24 @@ $cliApps = @(
     @{ Id = "eza-community.eza";        Name = "eza" }
 )
 
-Write-Host "`n  -- GUI Applications --" -ForegroundColor Magenta
-foreach ($app in $guiApps) {
-    Install-WingetPackage -Id $app.Id -Name $app.Name
+# winget is bundled with Win11, but guard anyway: a missing winget.exe would throw a
+# CommandNotFoundException inside Install-WingetPackage and abort the whole script.
+$wingetAvailable = [bool](Get-Command winget -ErrorAction SilentlyContinue)
+if (-not $wingetAvailable) {
+    Write-Warn "winget (App Installer) not found — skipping winget installs."
+    Write-Warn "Install 'App Installer' from the Microsoft Store, then re-run."
 }
 
-Write-Host "`n  -- CLI Tools --" -ForegroundColor Magenta
-foreach ($app in $cliApps) {
-    Install-WingetPackage -Id $app.Id -Name $app.Name
+if ($wingetAvailable) {
+    Write-Host "`n  -- GUI Applications --" -ForegroundColor Magenta
+    foreach ($app in $guiApps) {
+        Install-WingetPackage -Id $app.Id -Name $app.Name
+    }
+
+    Write-Host "`n  -- CLI Tools --" -ForegroundColor Magenta
+    foreach ($app in $cliApps) {
+        Install-WingetPackage -Id $app.Id -Name $app.Name
+    }
 }
 
 # sd, ktlint - not on winget, install via other means
@@ -333,18 +343,22 @@ $statusLineCommand = 'bash "$HOME/.claude/statusline-command.sh"'
 
 # Merge statusLine into settings.json without clobbering existing settings
 $settingsPath = Join-Path $claudeDir "settings.json"
+$settingsExisted = Test-Path $settingsPath
 $settings = $null
-if (Test-Path $settingsPath) {
+if ($settingsExisted) {
     try {
         $settings = [System.IO.File]::ReadAllText($settingsPath) | ConvertFrom-Json -ErrorAction Stop
     } catch {
         Write-Warn "settings.json is not valid JSON — leaving it as-is; add statusLine manually"
     }
 }
+# A present-but-unparseable file leaves $settings null after the try. Don't clobber it with
+# a fresh object below (that would discard the user's settings and contradict the warning).
+$settingsParseFailed = ($settingsExisted -and $null -eq $settings)
 if ($null -eq $settings) {
     $settings = [PSCustomObject]@{}
 }
-if ($settings -is [System.Management.Automation.PSCustomObject]) {
+if (-not $settingsParseFailed -and $settings -is [System.Management.Automation.PSCustomObject]) {
     # Idempotent: only rewrite settings.json when the statusLine actually differs.
     # Rewriting on every run makes a live Claude Code hot-reload its statusLine, which
     # is exactly what blanked it mid-setup. StrictMode-safe property probes throughout.
@@ -743,7 +757,7 @@ Write-Step "Phase 2: Setting up WSL services"
 $wslReady = Clean-WslOutput (wsl -d Ubuntu-24.04 -- echo "ok" 2>&1)
 if ($wslReady -ne "ok") {
     Write-Warn "WSL is installed but not yet ready (reboot required)."
-    Write-Warn "After rebooting, re-run this script to complete Phase 2 and 3."
+    Write-Warn "After rebooting, re-run this script to complete Phase 2 (WSL services)."
 }
 else {
     $setupWslUrl = "https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup-wsl.sh"
@@ -771,68 +785,115 @@ else {
         Write-OK "WSL user '$wslUser' created (password: $wslUser, passwordless sudo)"
     }
 
+    # setup-wsl.sh runs dozens of `sudo` calls non-interactively. A freshly created 'dev'
+    # has passwordless sudo; a pre-existing UID-1000 user might not, which would make every
+    # sudo fail under `set -e` (or hang). Ensure NOPASSWD before handing off.
+    wsl -d Ubuntu-24.04 -u $wslUser -- sudo -n true 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "    Granting passwordless sudo to '$wslUser' ..." -ForegroundColor White
+        wsl -d Ubuntu-24.04 -u root -- bash -c "echo '$wslUser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/$wslUser && chmod 440 /etc/sudoers.d/$wslUser"
+        Write-OK "Passwordless sudo configured for '$wslUser'"
+    }
+
     Write-Host "    Running as WSL user: $wslUser" -ForegroundColor Gray
     wsl -d Ubuntu-24.04 -u $wslUser -- bash "$wslScriptPath"
+}
 
-    # --- Phase 3: GitHub Auth + Clone Backend Repos ---
+# --- Phase 3: GitHub Auth + Clone Backend Repos ---
+# Independent of WSL (clones into the Windows home dir and only needs gh from Phase 1), so it
+# runs even when WSL still needs a reboot — otherwise a first run would leave repos uncloned.
 
-    Write-Step "Phase 3: GitHub authentication and repository cloning"
+Write-Step "Phase 3: GitHub authentication and repository cloning"
 
-    $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
 
-    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-        Write-Warn "GitHub CLI not found. Skipping Phase 3."
-        Write-Host "    Install gh and run clone-repos.ps1 manually later." -ForegroundColor White
+if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+    Write-Warn "GitHub CLI not found. Skipping Phase 3."
+    Write-Host "    Install gh and run clone-repos.ps1 manually later." -ForegroundColor White
+}
+else {
+    # Check auth by exit code (wrap in try/catch — gh stderr becomes ErrorRecord)
+    $ghAuthed = $false
+    try { $null = gh auth status 2>&1; if ($LASTEXITCODE -eq 0) { $ghAuthed = $true } } catch {}
+
+    if (-not $ghAuthed) {
+        Write-Host ""
+        Write-Host "    ============================================" -ForegroundColor Cyan
+        Write-Host "    GitHub Authentication" -ForegroundColor Cyan
+        Write-Host "    ============================================" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "    A browser will open to GitHub." -ForegroundColor White
+        Write-Host "    Enter the device code shown below and click Authorize." -ForegroundColor White
+        Write-Host ""
+        $env:GH_PROMPT_DISABLED = "1"
+        gh auth login --hostname github.com --git-protocol https --web --skip-ssh-key
+        $env:GH_PROMPT_DISABLED = ""
     }
-    else {
-        # Check auth by exit code (wrap in try/catch — gh stderr becomes ErrorRecord)
-        $ghAuthed = $false
-        try { $null = gh auth status 2>&1; if ($LASTEXITCODE -eq 0) { $ghAuthed = $true } } catch {}
 
-        if (-not $ghAuthed) {
-            Write-Host ""
-            Write-Host "    ============================================" -ForegroundColor Cyan
-            Write-Host "    GitHub Authentication" -ForegroundColor Cyan
-            Write-Host "    ============================================" -ForegroundColor Cyan
-            Write-Host ""
-            Write-Host "    A browser will open to GitHub." -ForegroundColor White
-            Write-Host "    Enter the device code shown below and click Authorize." -ForegroundColor White
-            Write-Host ""
-            $env:GH_PROMPT_DISABLED = "1"
-            gh auth login --hostname github.com --git-protocol https --web --skip-ssh-key
-            $env:GH_PROMPT_DISABLED = ""
-        }
+    # Re-check auth after login attempt
+    $ghAuthed = $false
+    try { $null = gh auth status 2>&1; if ($LASTEXITCODE -eq 0) { $ghAuthed = $true } } catch {}
 
-        # Re-check auth after login attempt
-        $ghAuthed = $false
-        try { $null = gh auth status 2>&1; if ($LASTEXITCODE -eq 0) { $ghAuthed = $true } } catch {}
+    if ($ghAuthed) {
+        Write-OK "GitHub authenticated"
 
-        if ($ghAuthed) {
-            Write-OK "GitHub authenticated"
-
-            Write-Host "    Downloading clone script from private repo ..." -ForegroundColor White
-            $cloneScript = gh api "repos/easi6dev/start-here/contents/teams/server/clone-repos.ps1" --jq ".content" 2>&1
-            $ghExitCode = $LASTEXITCODE
-            if ($ghExitCode -eq 0) {
-                $rawContent = ($cloneScript -join "") -replace "`r","" -replace "`n",""
-                $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($rawContent))
-                $cloneScriptPath = "$env:TEMP\clone-repos.ps1"
-                Set-Content -Path $cloneScriptPath -Value $decoded -Encoding UTF8
-                Write-OK "Clone script downloaded"
-
-                Write-Host "    Running clone-repos.ps1 ..." -ForegroundColor White
-                & $cloneScriptPath
-            }
-            else {
-                Write-Warn "Could not fetch clone script. Check your GitHub access to easi6dev/start-here."
-                Write-Host "    You can run it manually later:" -ForegroundColor White
-                Write-Host "    gh auth login && gh repo clone easi6dev/start-here && .\start-here\teams\server\clone-repos.ps1" -ForegroundColor White
-            }
+        # --- Git identity (user.name / user.email) ---
+        # Prompted here, AFTER gh auth, so we can prefill from the authenticated account.
+        # gh api user gives .name/.login (always) and .email (often null when the user keeps
+        # their email private). Enter accepts the [default]; typing a value overrides it.
+        Write-Step "Configuring git identity"
+        $gitName  = git config --global user.name  2>$null
+        $gitEmail = git config --global user.email 2>$null
+        if ($gitName -and $gitEmail) {
+            Write-Skip "git identity already set (name='$gitName', email='$gitEmail')"
         }
         else {
-            Write-Warn "Not authenticated with GitHub. Skipping Phase 3."
-            Write-Host "    Run manually later: gh auth login && gh repo clone easi6dev/start-here" -ForegroundColor White
+            $ghName = $null; $ghEmail = $null
+            try {
+                $ghUser  = gh api user 2>$null | ConvertFrom-Json
+                $ghName  = $ghUser.name
+                $ghEmail = $ghUser.email
+                if (-not $ghName) { $ghName = $ghUser.login }
+            } catch {}
+
+            $defName  = if ($ghName)  { $ghName }  else { $gitName }
+            $defEmail = if ($ghEmail) { $ghEmail } else { $gitEmail }
+
+            $nPrompt = if ($defName) { "    git user.name [$defName]" } else { "    git user.name" }
+            $inName  = (Read-Host $nPrompt).Trim()
+            if (-not $inName) { $inName = $defName }
+
+            # email is commonly null on gh (private) -> no default, user types it directly
+            $ePrompt = if ($defEmail) { "    git user.email [$defEmail]" } else { "    git user.email" }
+            $inEmail = (Read-Host $ePrompt).Trim()
+            if (-not $inEmail) { $inEmail = $defEmail }
+
+            if ($inName)  { git config --global user.name  $inName;  Write-OK "user.name=$inName" }
+            if ($inEmail) { git config --global user.email $inEmail; Write-OK "user.email=$inEmail" }
         }
+
+        Write-Host "    Downloading clone script from private repo ..." -ForegroundColor White
+        $cloneScript = gh api "repos/easi6dev/start-here/contents/teams/server/clone-repos.ps1" --jq ".content" 2>&1
+        $ghExitCode = $LASTEXITCODE
+        if ($ghExitCode -eq 0) {
+            $rawContent = ($cloneScript -join "") -replace "`r","" -replace "`n",""
+            $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($rawContent))
+            $cloneScriptPath = "$env:TEMP\clone-repos.ps1"
+            Set-Content -Path $cloneScriptPath -Value $decoded -Encoding UTF8
+            Write-OK "Clone script downloaded"
+
+            Write-Host "    Running clone-repos.ps1 ..." -ForegroundColor White
+            & $cloneScriptPath
+        }
+        else {
+            Write-Warn "Could not fetch clone script. Check your GitHub access to easi6dev/start-here."
+            Write-Host "    You can run it manually later:" -ForegroundColor White
+            Write-Host "    gh auth login && gh repo clone easi6dev/start-here && .\start-here\teams\server\clone-repos.ps1" -ForegroundColor White
+        }
+    }
+    else {
+        Write-Warn "Not authenticated with GitHub. Skipping Phase 3."
+        Write-Host "    Run manually later: gh auth login && gh repo clone easi6dev/start-here" -ForegroundColor White
     }
 }
 

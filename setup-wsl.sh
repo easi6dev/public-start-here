@@ -311,7 +311,13 @@ if [ -d "$WIN_GH_DIR" ]; then
         skip "gh config already symlinked"
     else
         mkdir -p "$HOME/.config"
-        rm -rf "$HOME/.config/gh" 2>/dev/null
+        # Back up a pre-existing real gh config before replacing it with the symlink
+        # (mirrors the statusline/CLAUDE.md backup pattern below — don't silently discard auth).
+        if [ -e "$HOME/.config/gh" ]; then
+            rm -rf "$HOME/.config/gh.bak" 2>/dev/null
+            mv "$HOME/.config/gh" "$HOME/.config/gh.bak"
+            ok "Backed up existing gh config -> $HOME/.config/gh.bak"
+        fi
         ln -sf "$WIN_GH_DIR" "$HOME/.config/gh"
         ok "gh auth shared from Windows (symlink)"
     fi
