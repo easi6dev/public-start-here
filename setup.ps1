@@ -538,6 +538,45 @@ foreach ($pf in $profilePaths) {
     }
 }
 
+# Fork command-line launcher (Git Bash / MSYS side)
+# Claude Code's `! <cmd>` prefix runs through Git Bash as a non-interactive, non-login shell,
+# so it sources neither the PowerShell profile nor WSL's ~/.fork.sh -- the `fork` *functions*
+# defined there don't exist for it, and `! fork` dies with "command not found". Git Bash only
+# resolves real executables on PATH. So drop a standalone `fork` script into ~/bin, which Git
+# for Windows' /etc/profile.d/env.sh always prepends to PATH (child processes like Claude's `!`
+# inherit it). cygpath converts $LOCALAPPDATA and the target dir to the MSYS / Windows forms
+# Git Bash and Fork.exe each need. Written with LF endings (a CRLF shebang breaks as
+# "/usr/bin/env: 'bash\r'") and no BOM; no chmod needed -- Git Bash treats any file starting
+# with #! as executable. The whole file is managed, so it's overwritten wholesale (idempotent).
+Write-Step "Configuring Fork command-line launcher (Git Bash)"
+
+$gitBashBinDir   = Join-Path $HOME "bin"
+$gitBashForkPath = Join-Path $gitBashBinDir "fork"
+$gitBashForkBody = @'
+#!/usr/bin/env bash
+# fork — open the Fork GUI at a directory (default: current). Managed by setup.ps1.
+# Standalone executable so Claude Code's `! fork` works: that prefix runs through Git Bash,
+# which resolves real binaries on PATH but not the `fork` shell functions in the PowerShell
+# profile or WSL ~/.fork.sh. cygpath bridges the MSYS <-> Windows path forms.
+target="${1:-.}"
+abs="$(cd "$target" 2>/dev/null && pwd)" || { echo "fork: no such directory: $1" >&2; exit 1; }
+base="$(cygpath -u "$LOCALAPPDATA")/Fork"
+exe="$base/current/Fork.exe"
+[ -x "$exe" ] || exe="$base/Fork.exe"
+[ -x "$exe" ] || { echo "fork: Fork.exe not found under $base" >&2; exit 1; }
+"$exe" "$(cygpath -w "$abs")"
+'@ -replace "`r`n", "`n"
+$gitBashForkBody = $gitBashForkBody.TrimEnd() + "`n"
+
+if (-not (Test-Path $gitBashBinDir)) { New-Item -ItemType Directory -Path $gitBashBinDir -Force | Out-Null }
+$existingFork = if (Test-Path $gitBashForkPath) { [System.IO.File]::ReadAllText($gitBashForkPath) -replace "`r`n", "`n" } else { "" }
+if ($gitBashForkBody -ceq $existingFork) {
+    Write-Skip "fork launcher already in ~/bin (Git Bash)"
+} else {
+    [System.IO.File]::WriteAllText($gitBashForkPath, $gitBashForkBody, $utf8NoBom)
+    Write-OK "fork launcher written to $gitBashForkPath (Git Bash)"
+}
+
 # zoxide shell init (PowerShell side)
 # zoxide exposes ONLY a `zoxide` binary on PATH; the `z` / `zi` commands are functions that
 # `zoxide init` generates at shell startup. Without this line in the profile, `z` doesn't
