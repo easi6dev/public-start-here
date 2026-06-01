@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-05-29.6"
+$SetupVersion = "2026-06-01.1"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -376,7 +376,11 @@ Write-Step "Configuring Claude Code CLAUDE.md"
 
 # Managed block is wrapped in markers so re-runs are idempotent and any user-authored
 # content outside the markers is preserved.
-$claudeMdStart = "<!-- TADA-TEAM-DEFAULTS:START (managed by setup.ps1 — do not edit inside) -->"
+# Markers (and the body below) are ASCII-only ON PURPOSE: `irm | iex` under Windows
+# PowerShell 5.1 mis-decodes the downloaded UTF-8 (non-ASCII turns into '?'), so a marker
+# containing an em-dash would be written corrupted and never match on the next run ->
+# duplicate blocks. ASCII survives that path intact.
+$claudeMdStart = "<!-- TADA-TEAM-DEFAULTS:START (managed by setup.ps1 - do not edit inside) -->"
 $claudeMdEnd   = "<!-- TADA-TEAM-DEFAULTS:END -->"
 $claudeMdBody = @'
 <MOST_IMPORTANT_RULE>
@@ -427,15 +431,15 @@ The test: Every changed line should trace directly to the user's request.
 **Define success criteria. Loop until verified.**
 
 Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
+- "Add validation" -> "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" -> "Write a test that reproduces it, then make it pass"
+- "Refactor X" -> "Ensure tests pass before and after"
 
 For multi-step tasks, state a brief plan:
 ```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
+1. [Step] -> verify: [check]
+2. [Step] -> verify: [check]
+3. [Step] -> verify: [check]
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
@@ -460,15 +464,21 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 '@ -replace "`r`n", "`n"
 
 $claudeMdPath = Join-Path $claudeDir "CLAUDE.md"
-$managedBlock = "$claudeMdStart`n$claudeMdBody`n$claudeMdEnd`n"
-$existingMd = ""
-if (Test-Path $claudeMdPath) { $existingMd = [System.IO.File]::ReadAllText($claudeMdPath) -replace "`r`n", "`n" }
+$managedBlock = "$claudeMdStart`n$claudeMdBody`n$claudeMdEnd"
+$existingMd = if (Test-Path $claudeMdPath) { [System.IO.File]::ReadAllText($claudeMdPath) -replace "`r`n", "`n" } else { "" }
 
-if ($existingMd -like "*$claudeMdStart*") {
-    Write-Skip "Team defaults already present in CLAUDE.md"
+# Strip ALL existing managed blocks (also self-heals duplicates from older buggy runs),
+# then append exactly one fresh block. Idempotent AND propagates future content changes.
+# Anchor the pattern on the ASCII-only sentinels (not the full marker): blocks written by
+# the old buggy path have a corrupted '?'-mangled comment, and only the ASCII anchors are
+# guaranteed to still match them so they get cleaned up too.
+$blockPattern = '<!-- TADA-TEAM-DEFAULTS:START[\s\S]*?TADA-TEAM-DEFAULTS:END -->'
+$cleaned = ([regex]::Replace($existingMd, $blockPattern, "")).TrimEnd()
+$newMd = if ($cleaned) { "$cleaned`n`n$managedBlock`n" } else { "$managedBlock`n" }
+
+if ($newMd -ceq $existingMd) {
+    Write-Skip "Team defaults already up to date in CLAUDE.md"
 } else {
-    if ($existingMd -and -not $existingMd.EndsWith("`n")) { $existingMd += "`n" }
-    $newMd = if ($existingMd) { "$existingMd`n$managedBlock" } else { $managedBlock }
     [System.IO.File]::WriteAllText($claudeMdPath, $newMd, $utf8NoBom)
     Write-OK "Team defaults written to $claudeMdPath"
 }

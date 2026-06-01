@@ -393,7 +393,9 @@ SL_CMD="bash $HOME/.claude/statusline-command.sh"
 if command_exists jq; then
     # Idempotent: skip the rewrite when statusLine already matches. Rewriting on every run
     # makes a live Claude Code hot-reload its statusLine unnecessarily.
-    CUR_SL=$(jq -r '.statusLine.command // empty' "$SL_SETTINGS" 2>/dev/null)
+    # '|| true' is required: under 'set -e' a bare assignment from a failing command
+    # substitution (e.g. settings.json missing -> jq exits non-zero) aborts the script.
+    CUR_SL=$(jq -r '.statusLine.command // empty' "$SL_SETTINGS" 2>/dev/null || true)
     if [ "$CUR_SL" = "$SL_CMD" ]; then
         skip "statusLine already configured in settings.json"
     elif [ -f "$SL_SETTINGS" ]; then
