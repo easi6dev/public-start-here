@@ -358,6 +358,25 @@ else
     ok "core.autocrlf=input"
 fi
 
+# delta as the git diff pager (brew installs it as git-delta; the binary is `delta`). Only
+# wire it up when delta is on PATH — pointing core.pager at a missing binary breaks `git diff`.
+# Idempotent: skip when already set. Only the interactive view changes; pipes/redirects and
+# `git --no-pager diff` (or the `rawdiff` alias) still show the plain format.
+if command_exists delta; then
+    if [ "$(git config --global core.pager 2>/dev/null)" = "delta" ]; then
+        skip "delta already configured as git pager"
+    else
+        git config --global core.pager "delta"
+        git config --global interactive.diffFilter "delta --color-only"
+        git config --global delta.navigate true
+        git config --global delta.line-numbers true
+        git config --global alias.rawdiff "--no-pager diff"
+        ok "delta set as git diff pager (use 'git rawdiff' for plain format)"
+    fi
+else
+    warn "delta not found on PATH — skipped git pager config"
+fi
+
 # --- Claude Code statusLine (shared with Windows via symlink) ---
 
 step "Configuring Claude Code statusLine"

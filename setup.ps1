@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-06-01.7"
+$SetupVersion = "2026-06-01.8"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -592,6 +592,23 @@ Write-Step "Configuring git defaults"
 git config --global core.autocrlf input
 git config --global core.eol lf
 Write-OK "core.autocrlf=input, core.eol=lf"
+
+# delta as the git diff pager (syntax + word-level highlighting, line numbers). Only wire it
+# up when delta is actually on PATH — pointing core.pager at a missing binary breaks `git diff`
+# in the terminal. `git config --global` is inherently idempotent (re-setting the same value is
+# a no-op), so this matches the unconditional style above. This only upgrades the *interactive*
+# view: pipes/redirects/scripts bypass the pager automatically, and `git --no-pager diff` (or the
+# `rawdiff` alias) always shows the plain format.
+if (Get-Command delta -ErrorAction SilentlyContinue) {
+    git config --global core.pager "delta"
+    git config --global interactive.diffFilter "delta --color-only"
+    git config --global delta.navigate true
+    git config --global delta.line-numbers true
+    git config --global alias.rawdiff "--no-pager diff"
+    Write-OK "delta set as git diff pager (use 'git rawdiff' for plain format)"
+} else {
+    Write-Skip "delta not found on PATH — skipped git pager config"
+}
 
 # --- Windows developer-friendly settings ---
 
