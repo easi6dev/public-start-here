@@ -837,15 +837,18 @@ else {
     if ($ghAuthed) {
         Write-OK "GitHub authenticated"
 
-        # --- Git identity (user.name / user.email) ---
+        # --- Git identity (user.name / user.email) — applied to BOTH Windows and WSL ---
         # Prompted here, AFTER gh auth, so we can prefill from the authenticated account.
         # gh api user gives .name/.login (always) and .email (often null when the user keeps
         # their email private). Enter accepts the [default]; typing a value overrides it.
+        # Identity is the only part of .gitconfig safe to share across OSes, so we set the
+        # same value in each side's own config rather than symlinking the whole file.
         Write-Step "Configuring git identity"
         $gitName  = git config --global user.name  2>$null
         $gitEmail = git config --global user.email 2>$null
         if ($gitName -and $gitEmail) {
-            Write-Skip "git identity already set (name='$gitName', email='$gitEmail')"
+            # Already set on Windows — reuse those values (no prompt), still mirror to WSL below.
+            Write-Skip "git identity already set on Windows (name='$gitName', email='$gitEmail')"
         }
         else {
             $ghName = $null; $ghEmail = $null
@@ -868,9 +871,16 @@ else {
             $inEmail = (Read-Host $ePrompt).Trim()
             if (-not $inEmail) { $inEmail = $defEmail }
 
-            if ($inName)  { git config --global user.name  $inName;  Write-OK "user.name=$inName" }
-            if ($inEmail) { git config --global user.email $inEmail; Write-OK "user.email=$inEmail" }
+            if ($inName)  { git config --global user.name  $inName;  $gitName  = $inName }
+            if ($inEmail) { git config --global user.email $inEmail; $gitEmail = $inEmail }
+            Write-OK "git identity set on Windows (name='$gitName', email='$gitEmail')"
         }
+
+        # Mirror the resolved identity into WSL's own ~/.gitconfig (git installed in Phase 2).
+        # Always run so a previously Windows-only config still propagates to WSL on re-runs.
+        if ($gitName)  { wsl -d Ubuntu-24.04 -u $wslUser -- git config --global user.name  "$gitName"  2>$null }
+        if ($gitEmail) { wsl -d Ubuntu-24.04 -u $wslUser -- git config --global user.email "$gitEmail" 2>$null }
+        if ($gitName -and $gitEmail) { Write-OK "git identity mirrored to WSL user '$wslUser'" }
 
         Write-Host "    Downloading clone script from private repo ..." -ForegroundColor White
         $cloneScript = gh api "repos/easi6dev/start-here/contents/teams/server/clone-repos.ps1" --jq ".content" 2>&1

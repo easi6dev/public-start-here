@@ -330,6 +330,20 @@ else
     warn "Windows gh config not found at $WIN_GH_DIR — run 'gh auth login' in Windows first"
 fi
 
+# --- Git defaults ---
+# WSL keeps its OWN ~/.gitconfig (NOT symlinked from Windows): credential.helper, editor
+# paths, etc. must differ per-OS. Only line-ending policy is mirrored here; identity
+# (user.name/email) is pushed in from setup.ps1 Phase 3 after the prompt.
+# autocrlf=input is the standard Linux default (commit LF, no checkout conversion).
+
+step "Configuring git defaults"
+if [ "$(git config --global core.autocrlf 2>/dev/null)" = "input" ]; then
+    skip "core.autocrlf already input"
+else
+    git config --global core.autocrlf input
+    ok "core.autocrlf=input"
+fi
+
 # --- Claude Code statusLine (shared with Windows via symlink) ---
 
 step "Configuring Claude Code statusLine"
