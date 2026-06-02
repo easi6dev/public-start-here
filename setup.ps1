@@ -470,6 +470,18 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - Use `fzf` for interactive fuzzy finding
 - Use `zoxide` (`z`) instead of `cd` for directory navigation
 </CLI_Tools>
+
+<SHELL_SYNTAX>
+This environment exposes two shell tools - **Bash** and **PowerShell**. Their syntax is NOT interchangeable. Match the syntax to the tool you actually call, not to the OS default shell.
+
+- **PowerShell here-strings (`@'...'@`, `@"..."@`) are PowerShell-ONLY.** In the Bash tool they are parsed as a literal `@` + quoted string + literal `@`, so stray `@` characters leak into the output - e.g. they end up as the first and last line of a commit message.
+- Other PowerShell-only constructs that silently misbehave in the Bash tool: `$env:VAR` (bash: `$VAR`), backtick line-continuation (bash: `\`), `2>$null` (bash: `2>/dev/null`), and all cmdlets.
+
+**Passing multi-line text (commit messages, file bodies) to a native command:**
+- Preferred: write the text with the Write tool, then `git commit -F msg.txt` - delete the temp file afterward.
+- Or a real bash here-doc in the Bash tool: `git commit -F - <<'EOF' ... EOF`.
+- Do NOT use inline here-string syntax for this.
+</SHELL_SYNTAX>
 '@ -replace "`r`n", "`n"
 
 $claudeMdPath = Join-Path $claudeDir "CLAUDE.md"
