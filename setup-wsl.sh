@@ -597,6 +597,24 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
     fi
 done
 
+# --- Enable user lingering (so user-level systemd services start at boot) ---
+# ActiveMQ runs as a systemd *user* service (created by `brew services start activemq`
+# below), which only auto-starts on a cold WSL boot when lingering is enabled for this
+# user. The DB services are system units and already start at boot; without this, ActiveMQ
+# alone would fail to come up after a login-less boot. loginctl needs systemd active; if
+# systemd isn't running yet, this warns and is a no-op (re-run once systemd is enabled).
+step "Enabling user lingering (boot-time ActiveMQ)"
+LINGER_USER="$(whoami)"
+if [ "$(loginctl show-user "$LINGER_USER" --property=Linger 2>/dev/null || true)" = "Linger=yes" ]; then
+    skip "lingering already enabled for $LINGER_USER"
+else
+    if sudo loginctl enable-linger "$LINGER_USER" 2>/dev/null; then
+        ok "lingering enabled for $LINGER_USER (user services start at boot)"
+    else
+        warn "could not enable lingering for $LINGER_USER (is systemd active?)"
+    fi
+fi
+
 # --- Start services ---
 
 step "Starting services"

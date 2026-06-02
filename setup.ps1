@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-06-01.8"
+$SetupVersion = "2026-06-02.1"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -927,6 +927,52 @@ networkingMode=mirrored
     Set-Content -Path $wslConfigPath -Value $wslConfigContent
     Write-OK ".wslconfig created with defaults (processors=$processors, memory=$memory)"
     Write-Warn "Edit $wslConfigPath to adjust CPU/memory allocation for your machine"
+}
+
+# --- WSL service autostart (keep WSL alive at logon so its systemd serves the DB/MQ ports) ---
+# setup-wsl.sh makes the services auto-start *inside* WSL (systemd units + user lingering),
+# but WSL itself stays Stopped after a Windows boot until something launches it, and a bare
+# boot-then-exit lets WSL idle-shut-down mid-session (killing redis/postgres/etc.). So the
+# logon task launches a hidden, persistent `wsl ... sleep infinity` that BOTH boots Ubuntu-24.04
+# (-> systemd starts redis/postgres/mongo/rabbitmq + activemq via lingering) AND holds the VM
+# open for the whole session. Launcher + task are idempotent. (Requires WSL systemd enabled.)
+Write-Step "Configuring WSL service autostart (logon task)"
+
+$tadaLocalDir = Join-Path $env:LOCALAPPDATA "TADA"
+if (-not (Test-Path $tadaLocalDir)) { New-Item -ItemType Directory -Path $tadaLocalDir -Force | Out-Null }
+
+$wslAutostartVbs = Join-Path $tadaLocalDir "wsl-autostart.vbs"
+$vbsBody = @'
+' TADA WSL autostart launcher (managed by setup.ps1) - boots Ubuntu-24.04 silently at logon
+' and HOLDS it open (sleep infinity) so systemd's DB/MQ services stay up the whole login
+' session, not just at boot. Run hidden (0) and don't wait (False).
+CreateObject("WScript.Shell").Run "wsl.exe -d Ubuntu-24.04 -- sleep infinity", 0, False
+'@ -replace "`r`n", "`n"
+$existingVbs = if (Test-Path $wslAutostartVbs) { [System.IO.File]::ReadAllText($wslAutostartVbs) -replace "`r`n", "`n" } else { $null }
+if ($existingVbs -ceq $vbsBody) {
+    Write-Skip "WSL autostart launcher already up to date"
+} else {
+    [System.IO.File]::WriteAllText($wslAutostartVbs, $vbsBody, $utf8NoBom)
+    Write-OK "WSL autostart launcher written to $wslAutostartVbs"
+}
+
+$wslTaskName = "TADA WSL Autostart"
+$wslTaskArg  = "`"$wslAutostartVbs`""
+$existingTask = Get-ScheduledTask -TaskName $wslTaskName -ErrorAction SilentlyContinue
+$wslTaskOk = $false
+if ($existingTask) {
+    $existingAct = @($existingTask.Actions)[0]
+    if ($existingAct -and $existingAct.Execute -eq 'wscript.exe' -and $existingAct.Arguments -eq $wslTaskArg) { $wslTaskOk = $true }
+}
+if ($wslTaskOk) {
+    Write-Skip "Logon task '$wslTaskName' already registered"
+} else {
+    $wslTaskAction    = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument $wslTaskArg
+    $wslTaskTrigger   = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+    $wslTaskSettings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+    $wslTaskPrincipal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+    Register-ScheduledTask -TaskName $wslTaskName -Action $wslTaskAction -Trigger $wslTaskTrigger -Settings $wslTaskSettings -Principal $wslTaskPrincipal -Description "Boot WSL Ubuntu-24.04 at logon so systemd starts DB/MQ services (redis, postgres, mongo, rabbitmq, activemq)" -Force | Out-Null
+    Write-OK "Logon task '$wslTaskName' registered (boots + keeps WSL alive at sign-in)"
 }
 
 # --- Phase 2: WSL internal setup ---
