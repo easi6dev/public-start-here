@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-06-02.1"
+$SetupVersion = "2026-06-02.2"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -1062,6 +1062,22 @@ else {
 
     if ($ghAuthed) {
         Write-OK "GitHub authenticated"
+
+        # --- Use gh as the git credential helper (bypass the bundled GCM account picker) ---
+        # Git for Windows bundles Git Credential Manager and sets credential.helper=manager in its
+        # SYSTEM gitconfig. When more than one GitHub account ends up cached, GCM pops a "Select an
+        # account" dialog on every git network op. `gh auth setup-git` writes a host-scoped helper
+        # into the user's ~/.gitconfig: an empty `credential.https://github.com.helper=` (a list
+        # reset) followed by `!gh auth git-credential`. Read after the system entry, the reset
+        # discards `manager` for github.com only, so GCM is never invoked there -- gh serves the
+        # token we just authenticated above. Idempotent: re-runs rewrite the same two lines.
+        Write-Step "Configuring gh as git credential helper (bypass GCM account picker)"
+        gh auth setup-git
+        if ($LASTEXITCODE -eq 0) {
+            Write-OK "git uses GitHub CLI for github.com credentials (no GCM popup)"
+        } else {
+            Write-Warn "gh auth setup-git failed (exit $LASTEXITCODE) - GCM stays in use for github.com"
+        }
 
         # --- Git identity (user.name / user.email) — applied to BOTH Windows and WSL ---
         # Prompted here, AFTER gh auth, so we can prefill from the authenticated account.
