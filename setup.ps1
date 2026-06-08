@@ -820,18 +820,39 @@ if (-not (Test-Path $wtDir)) {
     } catch { Write-Warn "Could not update Windows Terminal settings: $_" }
 }
 
-# --- hosts file (host.docker.internal) ---
+# --- hosts file (host.docker.internal -> 127.0.0.1) ---
+# The DB/MQ services live on the local loopback (inside WSL, shared with Windows via
+# networkingMode=mirrored), so host.docker.internal must resolve to 127.0.0.1. ENSURE that
+# mapping rather than "add only if the name is absent": a stale active line pointing the name
+# at a different address (e.g. a LAN dev box like 192.168.x.x) has to be overridden, not
+# skipped. Idempotent — a run that already has exactly the loopback line does nothing.
 
 Write-Step "Configuring hosts file"
 $hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
-$hostsContent = Get-Content $hostsFile -Raw -ErrorAction SilentlyContinue
-if ($hostsContent -match "host\.docker\.internal") {
-    Write-Skip "host.docker.internal already in hosts file"
+$lines = @(Get-Content $hostsFile -ErrorAction SilentlyContinue)
+
+$hasCorrect = $lines | Where-Object { $_ -match '^\s*127\.0\.0\.1\s+host\.docker\.internal\s*$' }
+# Active (uncommented) lines that name host.docker.internal but map it somewhere other than loopback
+$hasWrongActive = $lines |
+    Where-Object { $_ -match '^\s*[^#\s].*\bhost\.docker\.internal\b' } |
+    Where-Object { $_ -notmatch '^\s*127\.0\.0\.1\s+host\.docker\.internal\s*$' }
+
+if ($hasCorrect -and -not $hasWrongActive) {
+    Write-Skip "host.docker.internal already mapped to 127.0.0.1"
 }
 else {
-    Add-Content -Path $hostsFile -Value "`n127.0.0.1 host.docker.internal" -ErrorAction SilentlyContinue
+    # Comment out any active mapping that points the name somewhere other than loopback ...
+    $newLines = $lines | ForEach-Object {
+        if ($_ -match '\bhost\.docker\.internal\b' -and $_ -notmatch '^\s*127\.0\.0\.1\s') {
+            "# (disabled by setup) $_"
+        }
+        else { $_ }
+    }
+    # ... and append the loopback line when it isn't already present.
+    if (-not $hasCorrect) { $newLines += "127.0.0.1 host.docker.internal" }
+    Set-Content -Path $hostsFile -Value $newLines -Encoding ASCII -ErrorAction SilentlyContinue
     if ($?) {
-        Write-OK "Added 127.0.0.1 host.docker.internal to hosts file"
+        Write-OK "host.docker.internal mapped to 127.0.0.1 in hosts file"
     }
     else {
         Write-Warn "Could not modify hosts file — add manually: 127.0.0.1 host.docker.internal"
