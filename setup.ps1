@@ -921,7 +921,7 @@ if (Test-Path $wslConfigPath) {
 }
 else {
     $processors = 8
-    $memory = "32GB"
+    $memory = "56GB"
     $wslConfigContent = @"
 [wsl2]
 processors = $processors
