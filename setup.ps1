@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-06-02.2"
+$SetupVersion = "2026-06-08.1"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -705,6 +705,14 @@ if ($null -ne $val -and $val.PSObject.Properties["LaunchTo"] -and $val.LaunchTo 
 } else {
     Set-ItemProperty -Path $explorerAdvanced -Name "LaunchTo" -Value 1
     Write-OK "Explorer now opens to This PC"
+}
+
+# Don't show snapped windows (snap groups) on taskbar-app hover, in Task view, or on Alt+Tab
+if ($null -ne $val -and $val.PSObject.Properties["EnableTaskGroups"] -and $val.EnableTaskGroups -eq 0) {
+    Write-Skip "Snap groups in taskbar/Task view/Alt+Tab already disabled"
+} else {
+    Set-ItemProperty -Path $explorerAdvanced -Name "EnableTaskGroups" -Value 0
+    Write-OK "Snap groups in taskbar/Task view/Alt+Tab disabled"
 }
 
 # Developer Mode (symlinks without admin)
