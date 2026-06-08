@@ -290,34 +290,38 @@ disp_cwd=$(printf '%s' "$cwd" | tr '\\' '/' | awk -F'/' -v n="$PATH_SEGMENTS" '{
   print out
 }')
 
-# Base: user@host:cwd  (hostname without -s for Git Bash compatibility)
-short_host=$(hostname 2>/dev/null | cut -d. -f1)
-printf '\033[01;32m%s@%s\033[00m:\033[01;34m%s\033[00m' "$(whoami)" "$short_host" "$disp_cwd"
-
-# Git branch (magenta) — only when cwd is inside a git repo
-if [ -n "$git_branch" ]; then
-  printf ' \033[01;35m(%s)\033[00m' "$git_branch"
-fi
-
-# Model name (cyan)
-if [ -n "$model" ]; then
-  printf ' \033[01;36m[%s]\033[00m' "$model"
-fi
+# Separator that only appears between segments that actually print, so an empty
+# leading segment (no ctx early in a session, or cwd not inside a git repo) never
+# leaves a stray leading or doubled space.
+sep=""
 
 # Context used percentage (bold yellow)
 if [ -n "$ctx_pct" ]; then
   ctx_int=$(printf '%.0f' "$ctx_pct")
-  printf ' \033[01;33m(%s%% ctx)\033[00m' "$ctx_int"
+  printf '%s\033[01;33m(%s%% ctx)\033[00m' "$sep" "$ctx_int"; sep=" "
+fi
+
+# Git branch (magenta) — only when cwd is inside a git repo
+if [ -n "$git_branch" ]; then
+  printf '%s\033[01;35m(%s)\033[00m' "$sep" "$git_branch"; sep=" "
+fi
+
+# Current working directory (blue)
+printf '%s\033[01;34m%s\033[00m' "$sep" "$disp_cwd"; sep=" "
+
+# Model name (cyan)
+if [ -n "$model" ]; then
+  printf '%s\033[01;36m[%s]\033[00m' "$sep" "$model"; sep=" "
 fi
 
 # Effort level (dim yellow) — only when present
 if [ -n "$effort" ]; then
-  printf ' \033[00;33m[effort:%s]\033[00m' "$effort"
+  printf '%s\033[00;33m[effort:%s]\033[00m' "$sep" "$effort"; sep=" "
 fi
 
 # Thinking enabled (bold white) — only when true
 if [ "$thinking" = "true" ]; then
-  printf ' \033[01;37m[thinking]\033[00m'
+  printf '%s\033[01;37m[thinking]\033[00m' "$sep"
 fi
 '@ -replace "`r`n", "`n"
 
