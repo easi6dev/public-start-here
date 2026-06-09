@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-06-08.1"
+$SetupVersion = "2026-06-09.1"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -949,7 +949,7 @@ if (Test-Path $wslConfigPath) {
     Write-Skip ".wslconfig already exists at $wslConfigPath"
 }
 else {
-    $processors = 8
+    $processors = 12
     $memory = "56GB"
     $wslConfigContent = @"
 [wsl2]
