@@ -377,72 +377,189 @@ else
     warn "delta not found on PATH — skipped git pager config"
 fi
 
-# --- Claude Code statusLine (shared with Windows via symlink) ---
+# --- ccstatusline (statusLine renderer; config shared with Windows via symlink) ---
 
-step "Configuring Claude Code statusLine"
+step "Installing ccstatusline (npm global, pinned)"
 
-mkdir -p "$HOME/.claude"
-SL_LINK="$HOME/.claude/statusline-command.sh"
-WIN_SL="/mnt/c/Users/$WIN_USER/.claude/statusline-command.sh"
-
-if [ -f "$WIN_SL" ]; then
-    # Share the same file Windows uses (single source of truth). The script is cross-env:
-    # the Windows-only PATH entries are harmless no-ops on WSL.
-    if [ -L "$SL_LINK" ] && [ "$(readlink "$SL_LINK")" = "$WIN_SL" ]; then
-        skip "statusline-command.sh already symlinked from Windows"
+# Node/npm come from nvm (installed above). Pin to a fixed version so WSL and Windows
+# render an identical status line.
+CCS_VERSION="2.2.21"
+if command_exists npm; then
+    if npm list -g ccstatusline 2>/dev/null | grep -q "ccstatusline@$CCS_VERSION"; then
+        skip "ccstatusline@$CCS_VERSION already installed"
+    elif npm install -g "ccstatusline@$CCS_VERSION" > /dev/null 2>&1; then
+        ok "ccstatusline@$CCS_VERSION installed"
     else
-        # Back up a pre-existing real file before replacing it with the symlink
-        if [ -e "$SL_LINK" ] && [ ! -L "$SL_LINK" ]; then
-            mv "$SL_LINK" "$SL_LINK.bak"
-            ok "Backed up existing statusline-command.sh -> $SL_LINK.bak"
-        fi
-        ln -sfn "$WIN_SL" "$SL_LINK"
-        ok "statusline-command.sh symlinked from Windows ($WIN_SL)"
+        warn "ccstatusline install failed — run 'npm install -g ccstatusline@$CCS_VERSION' manually"
     fi
 else
-    # Fallback: Windows file not present (e.g. running setup-wsl.sh standalone) — write a copy
-    cat > "$SL_LINK" <<'SLEOF'
-#!/bin/sh
-# Make dependencies resolvable regardless of the spawn PATH. The Windows-only entries
-# (/mingw64/bin, WinGet Links for jq) are harmless no-ops on WSL, where jq/git come from
-# the normal Linux PATH.
-export PATH="/usr/bin:/mingw64/bin:$HOME/AppData/Local/Microsoft/WinGet/Links:$PATH"
-input=$(cat)
-cwd=$(echo "$input" | jq -r '.cwd')
-model=$(echo "$input" | jq -r '.model.display_name // empty')
-ctx_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
-effort=$(echo "$input" | jq -r '.effort.level // empty')
-thinking=$(echo "$input" | jq -r '.thinking.enabled // false')
-
-# Git branch: run against cwd so it works in any repo regardless of JSON fields
-git_branch=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)
-
-# Shorten cwd to the last N path segments (change PATH_SEGMENTS to taste)
-PATH_SEGMENTS=2
-disp_cwd=$(printf '%s' "$cwd" | tr '\\' '/' | awk -F'/' -v n="$PATH_SEGMENTS" '{
-  out=""; start=NF-n+1; if(start<1) start=1;
-  for(i=start;i<=NF;i++){ if($i!=""){ out=(out=="")?$i:out"/"$i } }
-  if(start>1) out=".../" out;
-  print out
-}')
-
-# Base: user@host:cwd  (hostname without -s for portability)
-short_host=$(hostname 2>/dev/null | cut -d. -f1)
-printf '\033[01;32m%s@%s\033[00m:\033[01;34m%s\033[00m' "$(whoami)" "$short_host" "$disp_cwd"
-
-if [ -n "$git_branch" ]; then printf ' \033[01;35m(%s)\033[00m' "$git_branch"; fi
-if [ -n "$model" ]; then printf ' \033[01;36m[%s]\033[00m' "$model"; fi
-if [ -n "$ctx_pct" ]; then ctx_int=$(printf '%.0f' "$ctx_pct"); printf ' \033[01;33m(%s%% ctx)\033[00m' "$ctx_int"; fi
-if [ -n "$effort" ]; then printf ' \033[00;33m[effort:%s]\033[00m' "$effort"; fi
-if [ "$thinking" = "true" ]; then printf ' \033[01;37m[thinking]\033[00m'; fi
-SLEOF
-    chmod +x "$SL_LINK"
-    warn "Windows statusline not found at $WIN_SL — wrote a standalone WSL copy instead"
+    warn "npm not found — skipping ccstatusline install"
 fi
 
-# Merge statusLine into ~/.claude/settings.json (preserve other keys)
+step "Configuring ccstatusline config"
+
+# ccstatusline reads <home>/.config/ccstatusline/settings.json on every platform. Symlink
+# back to the file Windows wrote so both share one source of truth (the segments are
+# platform-neutral). The ccstatusline binary itself is per-env (Windows npm vs WSL nvm).
+mkdir -p "$HOME/.config/ccstatusline"
+CCS_LINK="$HOME/.config/ccstatusline/settings.json"
+WIN_CCS="/mnt/c/Users/$WIN_USER/.config/ccstatusline/settings.json"
+
+if [ -f "$WIN_CCS" ]; then
+    if [ -L "$CCS_LINK" ] && [ "$(readlink "$CCS_LINK")" = "$WIN_CCS" ]; then
+        skip "ccstatusline settings.json already symlinked from Windows"
+    else
+        # Back up a pre-existing real file before replacing it with the symlink
+        if [ -e "$CCS_LINK" ] && [ ! -L "$CCS_LINK" ]; then
+            mv "$CCS_LINK" "$CCS_LINK.bak"
+            ok "Backed up existing ccstatusline settings.json -> $CCS_LINK.bak"
+        fi
+        ln -sfn "$WIN_CCS" "$CCS_LINK"
+        ok "ccstatusline settings.json symlinked from Windows ($WIN_CCS)"
+    fi
+else
+    # Fallback: Windows config not present (e.g. running setup-wsl.sh standalone) — write a copy
+    cat > "$CCS_LINK" <<'SLEOF'
+{
+  "version": 3,
+  "lines": [
+    [
+      {
+        "id": "5",
+        "type": "git-branch",
+        "color": "magenta",
+        "metadata": {
+          "hideNoGit": "false",
+          "linkToRepo": "true"
+        }
+      },
+      {
+        "id": "2",
+        "type": "separator"
+      },
+      {
+        "id": "7",
+        "type": "git-changes",
+        "color": "yellow"
+      },
+      {
+        "id": "4",
+        "type": "separator"
+      },
+      {
+        "id": "3",
+        "type": "context-percentage",
+        "color": "brightWhite",
+        "metadata": {
+          "display": "slider",
+          "inverse": "false"
+        }
+      },
+      {
+        "id": "6",
+        "type": "separator"
+      },
+      {
+        "id": "1",
+        "type": "model",
+        "color": "white",
+        "rawValue": true
+      },
+      {
+        "id": "3d6fd313-5c1d-4325-a07b-b7641f508e39",
+        "type": "separator"
+      },
+      {
+        "id": "6b910852-e5e2-4122-9ec1-5b4075c0d3a4",
+        "type": "thinking-effort",
+        "color": "white",
+        "rawValue": true
+      },
+      {
+        "id": "53ea675f-f197-4276-a796-cccc5e1e314a",
+        "type": "separator"
+      },
+      {
+        "id": "6b88f7b2-200d-432c-aa86-48f0e71eaffa",
+        "type": "version",
+        "rawValue": false
+      }
+    ],
+    [
+      {
+        "id": "f3867b87-675a-4850-814b-41d0a86866a3",
+        "type": "current-working-dir",
+        "rawValue": true,
+        "metadata": {
+          "fishStyle": "true"
+        }
+      },
+      {
+        "id": "277277f5-c646-4e0b-9d1e-f71f0f52032d",
+        "type": "separator"
+      },
+      {
+        "id": "d4173979-e3a0-4d05-8018-003a6d43fe2a",
+        "type": "claude-account-email"
+      }
+    ],
+    [
+      {
+        "id": "26a6ec7a-8106-4acc-b6ff-0de7d753f448",
+        "type": "session-usage",
+        "rawValue": false,
+        "metadata": {
+          "display": "slider"
+        }
+      },
+      {
+        "id": "60591cec-b59d-468e-8b71-056e02fba825",
+        "type": "separator"
+      },
+      {
+        "id": "8bc27bf1-cb4e-4a61-b69a-29e5722f9d1c",
+        "type": "weekly-usage",
+        "metadata": {
+          "display": "slider"
+        }
+      }
+    ]
+  ],
+  "flexMode": "full",
+  "compactThreshold": 60,
+  "colorLevel": 2,
+  "inheritSeparatorColors": false,
+  "globalBold": false,
+  "gitCacheTtlSeconds": 5,
+  "minimalistMode": false,
+  "powerline": {
+    "enabled": false,
+    "separators": [
+      ""
+    ],
+    "separatorInvertBackground": [
+      false
+    ],
+    "startCaps": [],
+    "endCaps": [],
+    "autoAlign": false,
+    "continueThemeAcrossLines": false
+  },
+  "installation": {
+    "method": "pinned",
+    "installedVersion": "2.2.21"
+  }
+}
+SLEOF
+    warn "Windows ccstatusline config not found at $WIN_CCS — wrote a standalone WSL copy instead"
+fi
+
+# Merge statusLine into ~/.claude/settings.json (preserve other keys). Node is on nvm's
+# PATH, not the minimal PATH Claude Code spawns the command with, so wrap in a login shell
+# ('bash -lc') to source nvm before ccstatusline runs; a bare 'ccstatusline' would not resolve.
+mkdir -p "$HOME/.claude"
 SL_SETTINGS="$HOME/.claude/settings.json"
-SL_CMD="bash $HOME/.claude/statusline-command.sh"
+SL_CMD="bash -lc 'ccstatusline'"
 if command_exists jq; then
     # Idempotent: skip the rewrite when statusLine already matches. Rewriting on every run
     # makes a live Claude Code hot-reload its statusLine unnecessarily.
@@ -453,7 +570,7 @@ if command_exists jq; then
         skip "statusLine already configured in settings.json"
     elif [ -f "$SL_SETTINGS" ]; then
         SL_TMP=$(mktemp)
-        if jq --arg cmd "$SL_CMD" '.statusLine = {type:"command", command:$cmd}' "$SL_SETTINGS" > "$SL_TMP" 2>/dev/null; then
+        if jq --arg cmd "$SL_CMD" '.statusLine = {type:"command", command:$cmd, padding:0, refreshInterval:10}' "$SL_SETTINGS" > "$SL_TMP" 2>/dev/null; then
             mv "$SL_TMP" "$SL_SETTINGS"
             ok "statusLine merged into settings.json"
         else
@@ -461,7 +578,7 @@ if command_exists jq; then
             warn "settings.json is not valid JSON — add statusLine manually"
         fi
     else
-        jq -n --arg cmd "$SL_CMD" '{statusLine:{type:"command", command:$cmd}}' > "$SL_SETTINGS"
+        jq -n --arg cmd "$SL_CMD" '{statusLine:{type:"command", command:$cmd, padding:0, refreshInterval:10}}' > "$SL_SETTINGS"
         ok "settings.json created with statusLine"
     fi
 else

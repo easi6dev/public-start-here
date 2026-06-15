@@ -159,15 +159,16 @@ else { Write-Skip "Claude Code not found" }
 
 Write-Step "Removing Claude Code statusLine config"
 
-$claudeDir      = Join-Path $env:USERPROFILE ".claude"
-$statusLinePath = Join-Path $claudeDir "statusline-command.sh"
+$claudeDir    = Join-Path $env:USERPROFILE ".claude"
+$ccsConfigDir = Join-Path $env:USERPROFILE ".config\ccstatusline"
 
-# Windows statusline script
-if (Test-Path $statusLinePath) {
-    Remove-Item $statusLinePath -Force
-    Write-OK "Windows statusline-command.sh removed"
+# Windows ccstatusline config (the single source of truth setup.ps1 wrote). The npm global
+# binary itself is removed when Node.js LTS is uninstalled in the winget step above.
+if (Test-Path $ccsConfigDir) {
+    Remove-Item $ccsConfigDir -Recurse -Force
+    Write-OK "Windows ccstatusline config removed"
 }
-else { Write-Skip "Windows statusline-command.sh not found" }
+else { Write-Skip "Windows ccstatusline config not found" }
 
 # Drop the statusLine key from settings.json, preserving any other keys
 $settingsPath = Join-Path $claudeDir "settings.json"
@@ -186,7 +187,7 @@ if (Test-Path $settingsPath) {
 }
 else { Write-Skip "Windows settings.json not found" }
 
-# WSL side: unlink the symlink (restore the .bak if setup made one) and drop its statusLine key
+# WSL side: unlink the ccstatusline config symlink (restore the .bak if setup made one) and drop its statusLine key
 $wslOk = $false
 try {
     $r = (wsl -d Ubuntu-24.04 -- echo ok 2>$null) -replace "`0",""
@@ -195,7 +196,7 @@ try {
 
 if ($wslOk) {
     wsl -d Ubuntu-24.04 -- bash -lc '
-        L="$HOME/.claude/statusline-command.sh"
+        L="$HOME/.config/ccstatusline/settings.json"
         if [ -L "$L" ]; then rm -f "$L"; fi
         if [ -f "$L.bak" ]; then mv "$L.bak" "$L"; fi
         S="$HOME/.claude/settings.json"
@@ -204,7 +205,7 @@ if ($wslOk) {
             if jq "del(.statusLine)" "$S" > "$T" 2>/dev/null; then mv "$T" "$S"; else rm -f "$T"; fi
         fi
     ' 2>&1 | Out-Null
-    Write-OK "WSL statusline symlink + settings.json statusLine cleaned"
+    Write-OK "WSL ccstatusline config symlink + settings.json statusLine cleaned"
 }
 else { Write-Skip "WSL Ubuntu-24.04 not ready — skipped WSL statusLine cleanup" }
 

@@ -261,89 +261,178 @@ if (-not (Test-Path $claudeDir)) {
     New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
 }
 
-# statusline-command.sh — runs via Git Bash; needs jq + git on PATH (installed in Phase 1)
-$statusLineScript = @'
-#!/bin/sh
-# Make dependencies resolvable regardless of the PATH Claude Code spawns us with:
-#   /usr/bin, /mingw64/bin -> Git Bash coreutils + git (cat/awk/tr/cut/git)
-#   WinGet Links           -> jq (winget installs jq ONLY here, not in Git Bash dirs);
-#                             without this, jq fails and the statusline collapses to blank.
-# On WSL the WinGet path simply doesn't exist (harmless no-op) and jq comes from the
-# normal Linux PATH.
-export PATH="/usr/bin:/mingw64/bin:$HOME/AppData/Local/Microsoft/WinGet/Links:$PATH"
-input=$(cat)
-cwd=$(echo "$input" | jq -r '.cwd')
-model=$(echo "$input" | jq -r '.model.display_name // empty')
-ctx_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
-effort=$(echo "$input" | jq -r '.effort.level // empty')
-thinking=$(echo "$input" | jq -r '.thinking.enabled // false')
-
-# Git branch: run against cwd so it works in any repo regardless of JSON fields
-git_branch=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)
-
-# Shorten cwd to the last N path segments (change PATH_SEGMENTS to taste)
-PATH_SEGMENTS=2
-disp_cwd=$(printf '%s' "$cwd" | tr '\\' '/' | awk -F'/' -v n="$PATH_SEGMENTS" '{
-  out=""; start=NF-n+1; if(start<1) start=1;
-  for(i=start;i<=NF;i++){ if($i!=""){ out=(out=="")?$i:out"/"$i } }
-  if(start>1) out=".../" out;
-  print out
-}')
-
-# Separator that only appears between segments that actually print, so an empty
-# leading segment (no ctx early in a session, or cwd not inside a git repo) never
-# leaves a stray leading or doubled space.
-sep=""
-
-# Context used percentage (bold yellow)
-if [ -n "$ctx_pct" ]; then
-  ctx_int=$(printf '%.0f' "$ctx_pct")
-  printf '%s\033[01;33m(%s%% ctx)\033[00m' "$sep" "$ctx_int"; sep=" "
-fi
-
-# Git branch (magenta) — only when cwd is inside a git repo
-if [ -n "$git_branch" ]; then
-  printf '%s\033[01;35m(%s)\033[00m' "$sep" "$git_branch"; sep=" "
-fi
-
-# Current working directory (blue)
-printf '%s\033[01;34m%s\033[00m' "$sep" "$disp_cwd"; sep=" "
-
-# Model name (cyan)
-if [ -n "$model" ]; then
-  printf '%s\033[01;36m[%s]\033[00m' "$sep" "$model"; sep=" "
-fi
-
-# Effort level (dim yellow) — only when present
-if [ -n "$effort" ]; then
-  printf '%s\033[00;33m[effort:%s]\033[00m' "$sep" "$effort"; sep=" "
-fi
-
-# Thinking enabled (bold white) — only when true
-if [ "$thinking" = "true" ]; then
-  printf '%s\033[01;37m[thinking]\033[00m' "$sep"
-fi
-'@ -replace "`r`n", "`n"
-
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-$statusLinePath = Join-Path $claudeDir "statusline-command.sh"
-# Idempotent: only rewrite when content actually changed. Rewriting on every run would
-# bump the mtime and make a live Claude Code re-spawn the statusline needlessly.
-$existingSh = if (Test-Path $statusLinePath) { [System.IO.File]::ReadAllText($statusLinePath) } else { $null }
-if ($existingSh -ceq $statusLineScript) {
-    Write-Skip "statusline-command.sh already up to date"
+
+# Statusline is rendered by ccstatusline (https://github.com/sirmalloc/ccstatusline), a
+# Node CLI installed as an npm global and pinned to a fixed version so the whole team gets
+# an identical status line. Node/npm come from Phase 1 (winget OpenJS.NodeJS.LTS).
+$ccsVersion = "2.2.21"
+$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+$ccsInstalled = npm list -g ccstatusline --depth=0 2>$null | Select-String "ccstatusline@$ccsVersion"
+if ($ccsInstalled) {
+    Write-Skip "ccstatusline@$ccsVersion already installed"
 } else {
-    [System.IO.File]::WriteAllText($statusLinePath, $statusLineScript, $utf8NoBom)
-    Write-OK "statusline-command.sh written to $statusLinePath"
+    npm install -g "ccstatusline@$ccsVersion"
+    Write-OK "ccstatusline@$ccsVersion installed"
 }
 
-# Claude Code runs the statusLine command THROUGH Git Bash on Windows (it auto-detects
-# Git Bash), so just invoke `bash`. Do NOT embed an absolute
-# "C:/Program Files/Git/bin/bash.exe" path: the space in "Program Files" gets mis-split
-# when Claude Code re-parses the command for `bash -c`, and bash exits 126 (cannot execute)
-# -> blank status line. A bare `bash` (no spaces, resolved on Git Bash's own PATH) plus a
-# $HOME-relative script path sidesteps the space entirely and is user-agnostic.
-$statusLineCommand = 'bash "$HOME/.claude/statusline-command.sh"'
+# ccstatusline reads its config from <home>/.config/ccstatusline/settings.json on every
+# platform (verified in the package source — no APPDATA/XDG branch). This file is the
+# single source of truth that WSL symlinks back to, so edit the team config here only.
+$ccsConfigDir = Join-Path $env:USERPROFILE ".config\ccstatusline"
+if (-not (Test-Path $ccsConfigDir)) {
+    New-Item -ItemType Directory -Path $ccsConfigDir -Force | Out-Null
+}
+$ccsConfig = @'
+{
+  "version": 3,
+  "lines": [
+    [
+      {
+        "id": "5",
+        "type": "git-branch",
+        "color": "magenta",
+        "metadata": {
+          "hideNoGit": "false",
+          "linkToRepo": "true"
+        }
+      },
+      {
+        "id": "2",
+        "type": "separator"
+      },
+      {
+        "id": "7",
+        "type": "git-changes",
+        "color": "yellow"
+      },
+      {
+        "id": "4",
+        "type": "separator"
+      },
+      {
+        "id": "3",
+        "type": "context-percentage",
+        "color": "brightWhite",
+        "metadata": {
+          "display": "slider",
+          "inverse": "false"
+        }
+      },
+      {
+        "id": "6",
+        "type": "separator"
+      },
+      {
+        "id": "1",
+        "type": "model",
+        "color": "white",
+        "rawValue": true
+      },
+      {
+        "id": "3d6fd313-5c1d-4325-a07b-b7641f508e39",
+        "type": "separator"
+      },
+      {
+        "id": "6b910852-e5e2-4122-9ec1-5b4075c0d3a4",
+        "type": "thinking-effort",
+        "color": "white",
+        "rawValue": true
+      },
+      {
+        "id": "53ea675f-f197-4276-a796-cccc5e1e314a",
+        "type": "separator"
+      },
+      {
+        "id": "6b88f7b2-200d-432c-aa86-48f0e71eaffa",
+        "type": "version",
+        "rawValue": false
+      }
+    ],
+    [
+      {
+        "id": "f3867b87-675a-4850-814b-41d0a86866a3",
+        "type": "current-working-dir",
+        "rawValue": true,
+        "metadata": {
+          "fishStyle": "true"
+        }
+      },
+      {
+        "id": "277277f5-c646-4e0b-9d1e-f71f0f52032d",
+        "type": "separator"
+      },
+      {
+        "id": "d4173979-e3a0-4d05-8018-003a6d43fe2a",
+        "type": "claude-account-email"
+      }
+    ],
+    [
+      {
+        "id": "26a6ec7a-8106-4acc-b6ff-0de7d753f448",
+        "type": "session-usage",
+        "rawValue": false,
+        "metadata": {
+          "display": "slider"
+        }
+      },
+      {
+        "id": "60591cec-b59d-468e-8b71-056e02fba825",
+        "type": "separator"
+      },
+      {
+        "id": "8bc27bf1-cb4e-4a61-b69a-29e5722f9d1c",
+        "type": "weekly-usage",
+        "metadata": {
+          "display": "slider"
+        }
+      }
+    ]
+  ],
+  "flexMode": "full",
+  "compactThreshold": 60,
+  "colorLevel": 2,
+  "inheritSeparatorColors": false,
+  "globalBold": false,
+  "gitCacheTtlSeconds": 5,
+  "minimalistMode": false,
+  "powerline": {
+    "enabled": false,
+    "separators": [
+      ""
+    ],
+    "separatorInvertBackground": [
+      false
+    ],
+    "startCaps": [],
+    "endCaps": [],
+    "autoAlign": false,
+    "continueThemeAcrossLines": false
+  },
+  "installation": {
+    "method": "pinned",
+    "installedVersion": "2.2.21"
+  }
+}
+'@ -replace "`r`n", "`n"
+
+$ccsConfigPath = Join-Path $ccsConfigDir "settings.json"
+# Idempotent: only rewrite when content actually changed (avoids needless ccstatusline
+# cache churn). ccstatusline may later rewrite this file itself (e.g. its installation
+# block); that just triggers one harmless re-write on the next setup run.
+$existingCcs = if (Test-Path $ccsConfigPath) { [System.IO.File]::ReadAllText($ccsConfigPath) } else { $null }
+if ($existingCcs -ceq $ccsConfig) {
+    Write-Skip "ccstatusline settings.json already up to date"
+} else {
+    [System.IO.File]::WriteAllText($ccsConfigPath, $ccsConfig, $utf8NoBom)
+    Write-OK "ccstatusline settings.json written to $ccsConfigPath"
+}
+
+# Claude Code routes the statusLine command through Git Bash on Windows; bare `ccstatusline`
+# resolves to the npm bash-shim on %APPDATA%\npm (added to PATH by the Node LTS installer),
+# matching ccstatusline's own pinned-global convention. If a box ever can't resolve it, fall
+# back to `ccstatusline.cmd` or an absolute path to the npm shim.
+$statusLineCommand = 'ccstatusline'
 
 # Merge statusLine into settings.json without clobbering existing settings
 $settingsPath = Join-Path $claudeDir "settings.json"
@@ -374,8 +463,10 @@ if (-not $settingsParseFailed -and $settings -is [System.Management.Automation.P
         Write-Skip "statusLine already configured in settings.json"
     } else {
         $statusLineObj = [PSCustomObject]@{
-            type    = "command"
-            command = $statusLineCommand
+            type            = "command"
+            command         = $statusLineCommand
+            padding         = 0
+            refreshInterval = 10
         }
         $settings | Add-Member -NotePropertyName statusLine -NotePropertyValue $statusLineObj -Force
         $json = $settings | ConvertTo-Json -Depth 20
