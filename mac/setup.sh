@@ -417,7 +417,11 @@ step "Configuring Claude Code CLAUDE.md"
 CLAUDE_MD="$HOME/.claude/CLAUDE.md"
 MD_START="<!-- TADA-TEAM-DEFAULTS:START (managed by mac/setup.sh - do not edit inside) -->"
 MD_END="<!-- TADA-TEAM-DEFAULTS:END -->"
-MD_TMP_BODY=$(cat <<'MDEOF'
+# Write the block body via a plain `cat > file` redirection — NOT $(cat <<...). bash 3.2
+# (the /bin/bash shipped on macOS) mis-parses a here-doc inside command substitution and
+# trips on apostrophes in the body ("Karpathy's", "Don't"), failing with "unexpected EOF".
+MD_BODY_TMP="$(mktemp)"
+cat > "$MD_BODY_TMP" <<'MDEOF'
 <MOST_IMPORTANT_RULE>
 Behavioral guidelines to reduce common LLM coding mistakes, derived from Andrej Karpathy's observations on LLM coding pitfalls.
 
@@ -497,21 +501,21 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - Use `zoxide` (`z`) instead of `cd` for directory navigation
 </CLI_Tools>
 MDEOF
-)
-MANAGED_BLOCK="$MD_START
-$MD_TMP_BODY
-$MD_END"
 
-EXISTING_MD=""
-[ -f "$CLAUDE_MD" ] && EXISTING_MD="$(cat "$CLAUDE_MD")"
-# Strip any prior managed block, then append exactly one fresh block.
-CLEANED_MD="$(printf '%s' "$EXISTING_MD" | sed '/<!-- TADA-TEAM-DEFAULTS:START/,/TADA-TEAM-DEFAULTS:END -->/d')"
-CLEANED_MD="$(printf '%s' "$CLEANED_MD" | sed -e :a -e '/^\n*$/{$d;N;ba}' 2>/dev/null || printf '%s' "$CLEANED_MD")"
-if [ -n "$CLEANED_MD" ]; then
-    printf '%s\n\n%s\n' "$CLEANED_MD" "$MANAGED_BLOCK" > "$CLAUDE_MD"
-else
-    printf '%s\n' "$MANAGED_BLOCK" > "$CLAUDE_MD"
-fi
+# Strip any prior managed block from the existing file (plain sed on the file), then rebuild:
+# existing content (trailing blanks trimmed) + one fresh managed block. No $(cat <<...) anywhere.
+EXISTING_TMP="$(mktemp)"
+[ -f "$CLAUDE_MD" ] && sed '/<!-- TADA-TEAM-DEFAULTS:START/,/TADA-TEAM-DEFAULTS:END -->/d' "$CLAUDE_MD" > "$EXISTING_TMP"
+{
+    if [ -s "$EXISTING_TMP" ]; then
+        awk 'NF{p=NR} {a[NR]=$0} END{for(i=1;i<=p;i++) print a[i]}' "$EXISTING_TMP"
+        printf '\n'
+    fi
+    printf '%s\n' "$MD_START"
+    cat "$MD_BODY_TMP"
+    printf '%s\n' "$MD_END"
+} > "$CLAUDE_MD"
+rm -f "$MD_BODY_TMP" "$EXISTING_TMP"
 ok "Team defaults written to $CLAUDE_MD"
 
 # --- git defaults ---
