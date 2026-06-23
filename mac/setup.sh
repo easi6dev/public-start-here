@@ -88,15 +88,36 @@ fi
 
 export HOMEBREW_NO_AUTO_UPDATE=1   # speed up the many install calls below
 
-# Helper: install a cask app (GUI), skipping if already present
+# Helper: install a cask app (GUI), skipping if already present.
+# Checks BOTH (a) Homebrew's own registry AND (b) the app bundle on disk — because Slack,
+# Chrome, etc. are often already installed manually (outside brew). Without the on-disk check,
+# `brew list --cask` reports "not installed" and we'd kick off a full re-download before brew
+# notices the existing app. If it's on disk but unmanaged, adopt it (no fresh app download).
 install_cask() {
     local id="$1" name="$2"
     if brew list --cask "$id" &>/dev/null; then
-        skip "$name already installed"
-    else
-        info "Installing $name ..."
-        if brew install --cask "$id"; then ok "$name installed"; else warn "$name install may have failed"; fi
+        skip "$name already installed (brew-managed)"
+        return
     fi
+    # Detect the cask's .app artifact(s) and see if any already exist on disk.
+    local present="" app
+    if command_exists jq; then
+        while IFS= read -r app; do
+            [ -z "$app" ] && continue
+            if [ -d "/Applications/$app" ] || [ -d "$HOME/Applications/$app" ]; then present="$app"; break; fi
+        done < <(brew info --cask --json=v2 "$id" 2>/dev/null | jq -r '.casks[0].artifacts[]?.app[]?' 2>/dev/null)
+    fi
+    if [ -n "$present" ]; then
+        info "$name already on disk ($present) — adopting into Homebrew (no re-download) ..."
+        if brew install --cask --adopt "$id" &>/dev/null; then
+            ok "$name adopted (now brew-managed)"
+        else
+            skip "$name already present — left as-is (not brew-managed)"
+        fi
+        return
+    fi
+    info "Installing $name ..."
+    if brew install --cask "$id"; then ok "$name installed"; else warn "$name install may have failed"; fi
 }
 
 # Helper: install a formula (CLI), skipping if already present
