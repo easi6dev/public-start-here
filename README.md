@@ -2,6 +2,8 @@
 
 Windows PC setup automation for TADA backend developers.
 
+> **On a Mac?** See [`mac/README.md`](mac/README.md) for the macOS setup.
+
 ---
 
 ## 👉 Which step are you on?
