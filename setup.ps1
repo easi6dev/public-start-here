@@ -227,10 +227,12 @@ if (-not $wingetAvailable) {
 }
 
 if ($wingetAvailable) {
-    # Self-heal before burning ~30 installs against a dead source. Escalate gently: an index sync
-    # is what actually repaired the first machine this hit (its source had simply never synced —
-    # network, TLS, Delivery Optimization and policy all checked out clean), so try that first and
-    # only fall back to the reset, which rewrites the source config, if the sync isn't enough.
+    # Self-heal before burning ~30 installs against a dead source. Escalate gently: sync the index
+    # first, and only fall back to the reset, which rewrites the source config, if that isn't
+    # enough. On the machine that prompted this, every environmental cause checked out clean
+    # (genuine CDN cert, DoSvc running, no policy, no proxy, correct clock) and the run was already
+    # elevated, so what put the source back is not established — a transient service-side outage is
+    # as plausible as a local index problem. Hence: attempt the cheap repairs, then report honestly.
     # A failed probe is reported but NOT treated as fatal: the canary could be unavailable for its
     # own reasons, and skipping all installs on a false negative is worse than trying and failing.
     Write-Host "    Checking winget package source ..." -ForegroundColor White
@@ -251,7 +253,7 @@ if ($wingetAvailable) {
             Write-OK "winget package source repaired"
         }
         else {
-            Write-Problem "winget package source is unreachable - the installs below will likely all fail." "Run as Administrator and retry: winget source update. If it still fails, check proxy/VPN (a TLS-inspecting VPN blocks the winget CDN)."
+            Write-Problem "winget package source is unreachable - the installs below will likely all fail." "Retry 'winget source update' in a few minutes (this can be a service-side outage). If it persists, check for a TLS-inspecting VPN/proxy, then re-run this script."
         }
     }
 
