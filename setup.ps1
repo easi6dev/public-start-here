@@ -9,9 +9,32 @@ try {
 
 Set-StrictMode -Version Latest
 
+# --- Problem log -------------------------------------------------------------------------
+# Steps that couldn't complete get recorded here and re-printed as one block at the very end.
+# A run installs 30+ packages across ~25 steps, so a single [WARN] in the middle scrolls out of
+# sight long before the run finishes — which is exactly how a machine with a dead winget source
+# looked like a successful setup. Declared up here (and Show-SetupProblems with it) so the
+# terminating-error handler at the bottom can print the list even if the run dies early.
+$script:setupProblems = @()
+
+function Show-SetupProblems {
+    if ($script:setupProblems.Count -eq 0) { return }
+    Write-Host ""
+    Write-Host "============================================" -ForegroundColor Red
+    Write-Host "  $($script:setupProblems.Count) step(s) did not complete" -ForegroundColor Red
+    Write-Host "============================================" -ForegroundColor Red
+    foreach ($p in $script:setupProblems) {
+        Write-Host "  - $($p.Message)" -ForegroundColor Yellow
+        if ($p.Fix) { Write-Host "      -> $($p.Fix)" -ForegroundColor Gray }
+    }
+    Write-Host ""
+    Write-Host "  Fix the above, then re-run this script - already-installed items are skipped." -ForegroundColor White
+    Write-Host ""
+}
+
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-08-03.1"
+$SetupVersion = "2026-08-03.2"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -66,6 +89,17 @@ function Write-Warn {
     Write-Host "    [WARN] $Message" -ForegroundColor DarkYellow
 }
 
+# A warning that ALSO lands in the end-of-run summary. Deliberately separate from Write-Warn:
+# plenty of warnings here are just reminders ("enable Docker WSL integration"), and mixing those
+# into the summary would bury the ones that actually blocked a step. $Fix is the one-line
+# remediation shown under the entry.
+function Write-Problem {
+    param([string]$Message, [string]$Fix)
+    Write-Warn $Message
+    if ($Fix) { Write-Host "           $Fix" -ForegroundColor DarkYellow }
+    $script:setupProblems += [pscustomobject]@{ Message = $Message; Fix = $Fix }
+}
+
 # Rebuild the process PATH from the registry so tools installed earlier in THIS run become
 # callable without restarting the shell. Registry alone isn't enough: Git for Windows installed
 # with the "Git Bash only" PATH option (or pre-installed by IT / bundled with another app) never
@@ -108,9 +142,19 @@ function Install-WingetPackage {
             Write-OK "$Name installed"
         }
         else {
-            Write-Warn "$Name install may have failed (exit code: $LASTEXITCODE)"
+            Write-Problem "$Name install may have failed (winget exit code: $LASTEXITCODE)"
         }
     }
+}
+
+# winget.exe can be present and working while its PACKAGE SOURCE is dead — a stale index, no
+# route to cdn.winget.microsoft.com, or a TLS-inspecting VPN (Cloudflare WARP does this). The
+# symptom is "Failed when searching source; results will not be included: winget" on every
+# command, and every install below then fails one at a time. Probe once with a package that is
+# always in the repo, so a dead source is reported up front instead of as 30 separate warnings.
+function Test-WingetSource {
+    $null = winget search --id Git.Git --exact --accept-source-agreements 2>&1
+    return ($LASTEXITCODE -eq 0)
 }
 
 # Strip null bytes from WSL UTF-16LE output
@@ -179,11 +223,29 @@ $cliApps = @(
 # CommandNotFoundException inside Install-WingetPackage and abort the whole script.
 $wingetAvailable = [bool](Get-Command winget -ErrorAction SilentlyContinue)
 if (-not $wingetAvailable) {
-    Write-Warn "winget (App Installer) not found — skipping winget installs."
-    Write-Warn "Install 'App Installer' from the Microsoft Store, then re-run."
+    Write-Problem "winget (App Installer) not found - all winget installs were skipped." "Install 'App Installer' from the Microsoft Store, then re-run this script."
 }
 
 if ($wingetAvailable) {
+    # Self-heal the common case (stale index) before burning ~30 installs against a dead source.
+    # A failed probe is reported but NOT treated as fatal: the canary could be unavailable for its
+    # own reasons, and skipping all installs on a false negative is worse than trying and failing.
+    Write-Host "    Checking winget package source ..." -ForegroundColor White
+    if (Test-WingetSource) {
+        Write-OK "winget package source reachable"
+    }
+    else {
+        Write-Host "    Source unreachable - running 'winget source reset --force' ..." -ForegroundColor White
+        winget source reset --force 2>&1 | Out-Null
+        winget source update 2>&1 | Out-Null
+        if (Test-WingetSource) {
+            Write-OK "winget package source repaired"
+        }
+        else {
+            Write-Problem "winget package source is unreachable - the installs below will likely all fail." "Check proxy/VPN first (Cloudflare WARP's TLS inspection blocks the winget CDN), then: winget source reset --force; winget source update"
+        }
+    }
+
     Write-Host "`n  -- GUI Applications --" -ForegroundColor Magenta
     foreach ($app in $guiApps) {
         Install-WingetPackage -Id $app.Id -Name $app.Name
@@ -295,7 +357,7 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 $ccsVersion = "2.2.21"
 Update-Path
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-    Write-Warn "npm not found on PATH - skipping ccstatusline install (Node.js missing?)"
+    Write-Problem "npm not found on PATH - ccstatusline (the Claude Code status line) was not installed." "Node.js LTS failed to install in Phase 1 - fix that, then re-run."
 } else {
     $ccsInstalled = npm list -g ccstatusline --depth=0 2>$null | Select-String "ccstatusline@$ccsVersion"
     if ($ccsInstalled) {
@@ -754,7 +816,7 @@ foreach ($pf in $profilePaths) {
 Write-Step "Installing Flipper server"
 Update-Path
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-    Write-Warn "npm not found on PATH - skipping flipper-server install (Node.js missing?)"
+    Write-Problem "npm not found on PATH - flipper-server was not installed." "Node.js LTS failed to install in Phase 1 - fix that, then re-run."
 }
 else {
     $null = npm list -g flipper-server 2>&1
@@ -775,9 +837,7 @@ else {
 Write-Step "Configuring git defaults"
 Update-Path
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Warn "git not found on PATH - skipping git config."
-    Write-Warn "Fix: winget install --id Git.Git -e --source winget"
-    Write-Warn "     then open a NEW admin PowerShell and re-run this script."
+    Write-Problem "git not found on PATH - git defaults (autocrlf/eol/pager) were not configured." "winget install --id Git.Git -e --source winget  then re-run in a NEW admin PowerShell."
 }
 else {
     git config --global core.autocrlf input
@@ -1216,8 +1276,7 @@ if (-not (Get-Command gh  -ErrorAction SilentlyContinue)) { $phase3Missing += "g
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { $phase3Missing += "git" }
 
 if ($phase3Missing.Count -gt 0) {
-    Write-Warn "$($phase3Missing -join ', ') not found on PATH. Skipping Phase 3."
-    Write-Host "    Install the missing tool(s), open a NEW admin PowerShell, and re-run this script." -ForegroundColor White
+    Write-Problem "Phase 3 skipped - $($phase3Missing -join ', ') not on PATH. No repos were cloned." "Install the missing tool(s), then re-run in a NEW admin PowerShell."
 }
 else {
     # Check auth by exit code (wrap in try/catch — gh stderr becomes ErrorRecord)
@@ -1336,21 +1395,26 @@ else {
             & $cloneScriptPath
         }
         else {
-            Write-Warn "Could not fetch clone script. Check your GitHub access to easi6dev/start-here."
-            Write-Host "    You can run it manually later:" -ForegroundColor White
-            Write-Host "    gh auth login && gh repo clone easi6dev/start-here && .\start-here\teams\server\clone-repos.ps1" -ForegroundColor White
+            Write-Problem "Could not fetch the clone script - no repos were cloned. Check your GitHub access to easi6dev/start-here." "gh repo clone easi6dev/start-here && .\start-here\teams\server\clone-repos.ps1"
         }
     }
     else {
-        Write-Warn "Not authenticated with GitHub. Skipping Phase 3."
-        Write-Host "    Run manually later: gh auth login && gh repo clone easi6dev/start-here" -ForegroundColor White
+        Write-Problem "Not authenticated with GitHub - Phase 3 skipped, no repos were cloned." "gh auth login  then re-run this script."
     }
 }
 
 Write-Host ""
-Write-Host "============================================" -ForegroundColor Green
-Write-Host "  Setup complete!" -ForegroundColor Green
-Write-Host "============================================" -ForegroundColor Green
+if ($script:setupProblems.Count -eq 0) {
+    Write-Host "============================================" -ForegroundColor Green
+    Write-Host "  Setup complete!" -ForegroundColor Green
+    Write-Host "============================================" -ForegroundColor Green
+} else {
+    # Don't claim success when steps were skipped — a "Setup complete!" over a dead winget source
+    # is what let the last broken machine look fine. Details print after the manual to-dos below.
+    Write-Host "============================================" -ForegroundColor Yellow
+    Write-Host "  Setup finished with $($script:setupProblems.Count) problem(s) - see the end of this log" -ForegroundColor Yellow
+    Write-Host "============================================" -ForegroundColor Yellow
+}
 Write-Host ""
 Write-Host "  Things to do manually:" -ForegroundColor Magenta
 Write-Host ""
@@ -1379,11 +1443,16 @@ Write-Host "     - Open IntelliJ and sign in to your JetBrains account" -Foregro
 Write-Host "     - Open a backend project from ~/backend/ to verify setup" -ForegroundColor White
 Write-Host ""
 
+# Last thing on screen, so it survives the scrollback of a 30-minute run.
+Show-SetupProblems
+
 } catch {
     Write-Host ""
     Write-Host "ERROR: Script failed at:" -ForegroundColor Red
     Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "  Line: $($_.InvocationInfo.ScriptLineNumber)" -ForegroundColor Red
     Write-Host ""
+    # Whatever was already recorded still explains how the run got here.
+    Show-SetupProblems
 }
 } # end of & { wrapper
