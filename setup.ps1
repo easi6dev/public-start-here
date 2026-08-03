@@ -227,7 +227,10 @@ if (-not $wingetAvailable) {
 }
 
 if ($wingetAvailable) {
-    # Self-heal the common case (stale index) before burning ~30 installs against a dead source.
+    # Self-heal before burning ~30 installs against a dead source. Escalate gently: an index sync
+    # is what actually repaired the first machine this hit (its source had simply never synced —
+    # network, TLS, Delivery Optimization and policy all checked out clean), so try that first and
+    # only fall back to the reset, which rewrites the source config, if the sync isn't enough.
     # A failed probe is reported but NOT treated as fatal: the canary could be unavailable for its
     # own reasons, and skipping all installs on a false negative is worse than trying and failing.
     Write-Host "    Checking winget package source ..." -ForegroundColor White
@@ -235,14 +238,20 @@ if ($wingetAvailable) {
         Write-OK "winget package source reachable"
     }
     else {
-        Write-Host "    Source unreachable - running 'winget source reset --force' ..." -ForegroundColor White
-        winget source reset --force 2>&1 | Out-Null
+        Write-Host "    Source unreachable - syncing the index (winget source update) ..." -ForegroundColor White
         winget source update 2>&1 | Out-Null
+
+        if (-not (Test-WingetSource)) {
+            Write-Host "    Still unreachable - resetting sources (winget source reset --force) ..." -ForegroundColor White
+            winget source reset --force 2>&1 | Out-Null
+            winget source update 2>&1 | Out-Null
+        }
+
         if (Test-WingetSource) {
             Write-OK "winget package source repaired"
         }
         else {
-            Write-Problem "winget package source is unreachable - the installs below will likely all fail." "Check proxy/VPN first (Cloudflare WARP's TLS inspection blocks the winget CDN), then: winget source reset --force; winget source update"
+            Write-Problem "winget package source is unreachable - the installs below will likely all fail." "Run as Administrator and retry: winget source update. If it still fails, check proxy/VPN (a TLS-inspecting VPN blocks the winget CDN)."
         }
     }
 
