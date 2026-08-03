@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-06-09.1"
+$SetupVersion = "2026-08-03.1"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -64,6 +64,32 @@ function Write-Skip {
 function Write-Warn {
     param([string]$Message)
     Write-Host "    [WARN] $Message" -ForegroundColor DarkYellow
+}
+
+# Rebuild the process PATH from the registry so tools installed earlier in THIS run become
+# callable without restarting the shell. Registry alone isn't enough: Git for Windows installed
+# with the "Git Bash only" PATH option (or pre-installed by IT / bundled with another app) never
+# registers C:\Program Files\Git\cmd, so `git` stays unresolvable and the first bare `git ...`
+# call throws CommandNotFoundException — which the top-level catch turns into a dead run. So
+# probe the well-known install dirs too and append any that actually hold git.exe.
+function Update-Path {
+    $machine = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $user    = [Environment]::GetEnvironmentVariable("Path", "User")
+    $parts   = @("$machine;$user" -split ';' | Where-Object { $_ })
+
+    # String interpolation, not Join-Path: an unset ProgramFiles(x86) makes Join-Path throw on
+    # a null path, and an exception here would abort the very run this function guards.
+    $gitDirs = @(
+        "$env:ProgramFiles\Git\cmd",
+        "${env:ProgramFiles(x86)}\Git\cmd",
+        "$env:LOCALAPPDATA\Programs\Git\cmd"
+    )
+    foreach ($dir in $gitDirs) {
+        if ((Test-Path (Join-Path $dir "git.exe")) -and ($parts -notcontains $dir)) {
+            $parts += $dir
+        }
+    }
+    $env:Path = ($parts -join ';')
 }
 
 function Install-WingetPackage {
@@ -173,7 +199,7 @@ if ($wingetAvailable) {
 Write-Step "Installing tools not available on winget"
 
 # Refresh PATH for newly installed tools
-$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+Update-Path
 
 # sd (via GitHub API to resolve latest release asset)
 if (Get-Command sd -ErrorAction SilentlyContinue) {
@@ -230,7 +256,7 @@ else {
 
 # Claude Code (native install - recommended)
 Write-Step "Installing Claude Code (native install)"
-$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+Update-Path
 if (Get-Command claude -ErrorAction SilentlyContinue) {
     Write-Skip "Claude Code already installed"
 }
@@ -267,13 +293,17 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 # Node CLI installed as an npm global and pinned to a fixed version so the whole team gets
 # an identical status line. Node/npm come from Phase 1 (winget OpenJS.NodeJS.LTS).
 $ccsVersion = "2.2.21"
-$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
-$ccsInstalled = npm list -g ccstatusline --depth=0 2>$null | Select-String "ccstatusline@$ccsVersion"
-if ($ccsInstalled) {
-    Write-Skip "ccstatusline@$ccsVersion already installed"
+Update-Path
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    Write-Warn "npm not found on PATH - skipping ccstatusline install (Node.js missing?)"
 } else {
-    npm install -g "ccstatusline@$ccsVersion"
-    Write-OK "ccstatusline@$ccsVersion installed"
+    $ccsInstalled = npm list -g ccstatusline --depth=0 2>$null | Select-String "ccstatusline@$ccsVersion"
+    if ($ccsInstalled) {
+        Write-Skip "ccstatusline@$ccsVersion already installed"
+    } else {
+        npm install -g "ccstatusline@$ccsVersion"
+        Write-OK "ccstatusline@$ccsVersion installed"
+    }
 }
 
 # ccstatusline reads its config from <home>/.config/ccstatusline/settings.json on every
@@ -722,38 +752,54 @@ foreach ($pf in $profilePaths) {
 
 # Flipper (mobile debugging, browser-based)
 Write-Step "Installing Flipper server"
-$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
-$null = npm list -g flipper-server 2>&1
-if ($LASTEXITCODE -eq 0) {
-    Write-Skip "flipper-server already installed"
+Update-Path
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    Write-Warn "npm not found on PATH - skipping flipper-server install (Node.js missing?)"
 }
 else {
-    npm install -g flipper-server
-    Write-OK "flipper-server installed (run: npx flipper-server)"
+    $null = npm list -g flipper-server 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Skip "flipper-server already installed"
+    }
+    else {
+        npm install -g flipper-server
+        Write-OK "flipper-server installed (run: npx flipper-server)"
+    }
 }
 
 # --- Git Config ---
 
+# Guarded on `git` being resolvable: a bare `git ...` with git off PATH throws
+# CommandNotFoundException, which the top-level catch turns into a dead run — everything below
+# (Windows settings, WSL, Phase 2, Phase 3) would never execute. Warn and move on instead.
 Write-Step "Configuring git defaults"
-git config --global core.autocrlf input
-git config --global core.eol lf
-Write-OK "core.autocrlf=input, core.eol=lf"
+Update-Path
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Warn "git not found on PATH - skipping git config."
+    Write-Warn "Fix: winget install --id Git.Git -e --source winget"
+    Write-Warn "     then open a NEW admin PowerShell and re-run this script."
+}
+else {
+    git config --global core.autocrlf input
+    git config --global core.eol lf
+    Write-OK "core.autocrlf=input, core.eol=lf"
 
-# delta as the git diff pager (syntax + word-level highlighting, line numbers). Only wire it
-# up when delta is actually on PATH — pointing core.pager at a missing binary breaks `git diff`
-# in the terminal. `git config --global` is inherently idempotent (re-setting the same value is
-# a no-op), so this matches the unconditional style above. This only upgrades the *interactive*
-# view: pipes/redirects/scripts bypass the pager automatically, and `git --no-pager diff` (or the
-# `rawdiff` alias) always shows the plain format.
-if (Get-Command delta -ErrorAction SilentlyContinue) {
-    git config --global core.pager "delta"
-    git config --global interactive.diffFilter "delta --color-only"
-    git config --global delta.navigate true
-    git config --global delta.line-numbers true
-    git config --global alias.rawdiff "--no-pager diff"
-    Write-OK "delta set as git diff pager (use 'git rawdiff' for plain format)"
-} else {
-    Write-Skip "delta not found on PATH — skipped git pager config"
+    # delta as the git diff pager (syntax + word-level highlighting, line numbers). Only wire it
+    # up when delta is actually on PATH — pointing core.pager at a missing binary breaks `git diff`
+    # in the terminal. `git config --global` is inherently idempotent (re-setting the same value is
+    # a no-op), so this matches the unconditional style above. This only upgrades the *interactive*
+    # view: pipes/redirects/scripts bypass the pager automatically, and `git --no-pager diff` (or the
+    # `rawdiff` alias) always shows the plain format.
+    if (Get-Command delta -ErrorAction SilentlyContinue) {
+        git config --global core.pager "delta"
+        git config --global interactive.diffFilter "delta --color-only"
+        git config --global delta.navigate true
+        git config --global delta.line-numbers true
+        git config --global alias.rawdiff "--no-pager diff"
+        Write-OK "delta set as git diff pager (use 'git rawdiff' for plain format)"
+    } else {
+        Write-Skip "delta not found on PATH — skipped git pager config"
+    }
 }
 
 # --- Windows developer-friendly settings ---
@@ -1103,8 +1149,14 @@ if ($wslTaskOk) {
 
 Write-Step "Phase 2: Setting up WSL services"
 
+# Declared before the branch: Phase 3 reads $wslUser to mirror the git identity into WSL, and
+# under Set-StrictMode -Version Latest an unset variable throws. Without this, the standard
+# first-run path (WSL needs a reboot -> the else branch never runs) killed Phase 3 mid-way.
+$wslUser = $null
+
 # Check if WSL is actually ready (may need reboot after first install)
-$wslReady = Clean-WslOutput (wsl -d Ubuntu-24.04 -- echo "ok" 2>&1)
+$wslReady = $null
+try { $wslReady = Clean-WslOutput (wsl -d Ubuntu-24.04 -- echo "ok" 2>&1) } catch {}
 if ($wslReady -ne "ok") {
     Write-Warn "WSL is installed but not yet ready (reboot required)."
     Write-Warn "After rebooting, re-run this script to complete Phase 2 (WSL services)."
@@ -1155,11 +1207,17 @@ else {
 
 Write-Step "Phase 3: GitHub authentication and repository cloning"
 
-$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+Update-Path
 
-if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    Write-Warn "GitHub CLI not found. Skipping Phase 3."
-    Write-Host "    Install gh and run clone-repos.ps1 manually later." -ForegroundColor White
+# Both tools are hard requirements here: gh for auth/download, git for the identity config and
+# the clones. Check up front — a bare `git ...` further down would otherwise throw and abort.
+$phase3Missing = @()
+if (-not (Get-Command gh  -ErrorAction SilentlyContinue)) { $phase3Missing += "gh (GitHub CLI)" }
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) { $phase3Missing += "git" }
+
+if ($phase3Missing.Count -gt 0) {
+    Write-Warn "$($phase3Missing -join ', ') not found on PATH. Skipping Phase 3."
+    Write-Host "    Install the missing tool(s), open a NEW admin PowerShell, and re-run this script." -ForegroundColor White
 }
 else {
     # Check auth by exit code (wrap in try/catch — gh stderr becomes ErrorRecord)
@@ -1253,12 +1311,16 @@ else {
         # Mirror the resolved identity into WSL's own ~/.gitconfig (git installed in Phase 2).
         # Always run so a previously Windows-only config still propagates to WSL on re-runs.
         # The first wsl.exe call can cold-start the WSL VM (~10-30s) and look frozen, so warn.
-        if ($gitName -or $gitEmail) {
-            Write-Host "    Mirroring identity to WSL - first WSL launch may take 10-30s, please wait (do not close) ..." -ForegroundColor Gray
+        # $wslUser is null when Phase 2 was skipped (WSL not ready yet) — mirror on the re-run.
+        if (-not $wslUser) {
+            Write-Skip "WSL not ready - git identity will be mirrored on the next run"
         }
-        if ($gitName)  { wsl -d Ubuntu-24.04 -u $wslUser -- git config --global user.name  "$gitName"  2>$null }
-        if ($gitEmail) { wsl -d Ubuntu-24.04 -u $wslUser -- git config --global user.email "$gitEmail" 2>$null }
-        if ($gitName -and $gitEmail) { Write-OK "git identity mirrored to WSL user '$wslUser'" }
+        elseif ($gitName -or $gitEmail) {
+            Write-Host "    Mirroring identity to WSL - first WSL launch may take 10-30s, please wait (do not close) ..." -ForegroundColor Gray
+            if ($gitName)  { wsl -d Ubuntu-24.04 -u $wslUser -- git config --global user.name  "$gitName"  2>$null }
+            if ($gitEmail) { wsl -d Ubuntu-24.04 -u $wslUser -- git config --global user.email "$gitEmail" 2>$null }
+            if ($gitName -and $gitEmail) { Write-OK "git identity mirrored to WSL user '$wslUser'" }
+        }
 
         Write-Host "    Downloading clone script from private repo ..." -ForegroundColor White
         $cloneScript = gh api "repos/easi6dev/start-here/contents/teams/server/clone-repos.ps1" --jq ".content" 2>&1
