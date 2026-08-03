@@ -131,13 +131,17 @@ function Install-WingetPackage {
         [string]$Id,
         [string]$Name
     )
-    $null = winget list --id $Id --exact --accept-source-agreements 2>&1
+    $null = winget list --id $Id --exact --accept-source-agreements --disable-interactivity 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Skip "$Name already installed"
     }
     else {
         Write-Host "    Installing $Name ..." -ForegroundColor White
-        winget install --id $Id --exact --accept-source-agreements --accept-package-agreements --silent
+        # --source winget: every Id in the lists above was verified to resolve from the community
+        # repo, so pinning it keeps msstore off the path entirely — no store agreement to accept,
+        # no ambiguity when a package exists in both. --disable-interactivity: if winget decides to
+        # prompt anyway, fail fast instead of parking an `irm | iex` run on a hidden input prompt.
+        winget install --id $Id --exact --source winget --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
         if ($LASTEXITCODE -eq 0) {
             Write-OK "$Name installed"
         }
@@ -147,13 +151,18 @@ function Install-WingetPackage {
     }
 }
 
-# winget.exe can be present and working while its PACKAGE SOURCE is dead — a stale index, no
-# route to cdn.winget.microsoft.com, or a TLS-inspecting VPN (Cloudflare WARP does this). The
-# symptom is "Failed when searching source; results will not be included: winget" on every
-# command, and every install below then fails one at a time. Probe once with a package that is
-# always in the repo, so a dead source is reported up front instead of as 30 separate warnings.
+# winget.exe can be present and working while its PACKAGE SOURCE is dead — an index that never
+# finished its first-run bootstrap, no route to cdn.winget.microsoft.com, or a TLS-inspecting
+# proxy. The symptom is "Failed when searching source; results will not be included: winget" on
+# every command, and every install below then fails one at a time. Probe once with a package
+# that is always in the repo, so a dead source is reported up front rather than as 30 warnings.
+#
+# Scoped to --source winget on purpose. An unscoped search queries msstore too, and msstore fails
+# independently (it gates on a store agreement and its own backend) — that would fail the probe
+# on a machine whose winget source is perfectly fine. Nothing here installs from msstore, so it
+# has no say in whether Phase 1 can proceed.
 function Test-WingetSource {
-    $null = winget search --id Git.Git --exact --accept-source-agreements 2>&1
+    $null = winget search --id Git.Git --exact --source winget --accept-source-agreements --disable-interactivity 2>&1
     return ($LASTEXITCODE -eq 0)
 }
 
@@ -241,12 +250,12 @@ if ($wingetAvailable) {
     }
     else {
         Write-Host "    Source unreachable - syncing the index (winget source update) ..." -ForegroundColor White
-        winget source update 2>&1 | Out-Null
+        winget source update --disable-interactivity 2>&1 | Out-Null
 
         if (-not (Test-WingetSource)) {
             Write-Host "    Still unreachable - resetting sources (winget source reset --force) ..." -ForegroundColor White
-            winget source reset --force 2>&1 | Out-Null
-            winget source update 2>&1 | Out-Null
+            winget source reset --force --disable-interactivity 2>&1 | Out-Null
+            winget source update --disable-interactivity 2>&1 | Out-Null
         }
 
         if (Test-WingetSource) {
