@@ -45,7 +45,7 @@ irm "https://raw.githubusercontent.com/easi6dev/public-start-here/main/setup.ps1
 ```
 
 3. Don't worry — everything already installed will be **skipped automatically**. Only these remain:
-   - WSL Ubuntu 24.04 services (PostgreSQL, MongoDB, Redis, RabbitMQ, ActiveMQ)
+   - WSL Ubuntu 24.04 services (PostgreSQL, MongoDB, Valkey, RabbitMQ, ActiveMQ)
    - CLI tools in WSL (gh, rg, fd, bat, etc.)
    - GitHub authentication + backend repo cloning
 
@@ -68,7 +68,7 @@ irm "https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1
 ### Windows — GUI Apps
 
 - **IntelliJ IDEA Ultimate** — Primary IDE for Kotlin/Spring backend development
-- **DataGrip** — Database IDE for querying PostgreSQL, MongoDB, Redis
+- **DataGrip** — Database IDE for querying PostgreSQL, MongoDB, Valkey
 - **JetBrains Toolbox** — Manages JetBrains IDE installations and updates
 - **Fork** — Git GUI client for visual branch management and diffs
 - **Docker Desktop** — Container runtime, uses WSL 2 backend on Windows
@@ -121,7 +121,7 @@ irm "https://raw.githubusercontent.com/easi6dev/public-start-here/main/reset.ps1
 
 - **PostgreSQL 16** — Primary relational database, with PostGIS extension
 - **MongoDB 8.0** — Document database for flexible schema storage
-- **Redis** — In-memory cache and message broker
+- **Valkey** — In-memory cache and message broker
 - **RabbitMQ** — Message queue with delayed message exchange plugin and management UI
 - **ActiveMQ** — Message broker for legacy service communication (installed via brew)
 
