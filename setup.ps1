@@ -1182,9 +1182,9 @@ networkingMode=mirrored
 # --- WSL service autostart (keep WSL alive at logon so its systemd serves the DB/MQ ports) ---
 # setup-wsl.sh makes the services auto-start *inside* WSL (systemd units + user lingering),
 # but WSL itself stays Stopped after a Windows boot until something launches it, and a bare
-# boot-then-exit lets WSL idle-shut-down mid-session (killing redis/postgres/etc.). So the
+# boot-then-exit lets WSL idle-shut-down mid-session (killing valkey/postgres/etc.). So the
 # logon task launches a hidden, persistent `wsl ... sleep infinity` that BOTH boots Ubuntu-24.04
-# (-> systemd starts redis/postgres/mongo/rabbitmq + activemq via lingering) AND holds the VM
+# (-> systemd starts postgres/mongo/rabbitmq, plus valkey + activemq via lingering) AND holds the VM
 # open for the whole session. Launcher + task are idempotent. (Requires WSL systemd enabled.)
 Write-Step "Configuring WSL service autostart (logon task)"
 
@@ -1221,7 +1221,7 @@ if ($wslTaskOk) {
     $wslTaskTrigger   = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
     $wslTaskSettings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
     $wslTaskPrincipal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
-    Register-ScheduledTask -TaskName $wslTaskName -Action $wslTaskAction -Trigger $wslTaskTrigger -Settings $wslTaskSettings -Principal $wslTaskPrincipal -Description "Boot WSL Ubuntu-24.04 at logon so systemd starts DB/MQ services (redis, postgres, mongo, rabbitmq, activemq)" -Force | Out-Null
+    Register-ScheduledTask -TaskName $wslTaskName -Action $wslTaskAction -Trigger $wslTaskTrigger -Settings $wslTaskSettings -Principal $wslTaskPrincipal -Description "Boot WSL Ubuntu-24.04 at logon so systemd starts DB/MQ services (valkey, postgres, mongo, rabbitmq, activemq)" -Force | Out-Null
     Write-OK "Logon task '$wslTaskName' registered (boots + keeps WSL alive at sign-in)"
 }
 
