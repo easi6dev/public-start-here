@@ -25,7 +25,7 @@ printf '\033[31m============================================\033[0m\n\n'
 cat <<'WHAT'
 This will remove:
   - All Homebrew cask GUI apps and CLI tools installed by setup.sh
-  - DB/MQ services (PostgreSQL, MongoDB, Redis, RabbitMQ, ActiveMQ) — stopped & uninstalled
+  - DB/MQ services (PostgreSQL, MongoDB, Valkey, RabbitMQ, ActiveMQ) — stopped & uninstalled
   - Claude Code + ccstatusline config (statusLine key, ~/.config/ccstatusline)
   - CLAUDE.md team-defaults block (your own content is kept)
   - fork/zoxide/nvm shell snippets from ~/.zshrc / ~/.bashrc / ~/.zprofile
@@ -40,10 +40,10 @@ if ! command_exists brew; then warn "Homebrew not found — most steps will be s
 
 # --- Stop & uninstall services ---
 step "Stopping and removing services"
-for svc in postgresql@16 mongodb-community@8.0 redis rabbitmq activemq; do
+for svc in postgresql@16 mongodb-community@8.0 valkey rabbitmq activemq; do
     brew services stop "$svc" 2>/dev/null || true
 done
-for f in postgresql@16 postgis mongodb-community@8.0 redis rabbitmq activemq; do
+for f in postgresql@16 postgis mongodb-community@8.0 valkey rabbitmq activemq; do
     if brew list --formula "$f" &>/dev/null; then brew uninstall --force "$f" 2>/dev/null && ok "$f removed" || warn "could not remove $f"; else skip "$f not installed"; fi
 done
 
