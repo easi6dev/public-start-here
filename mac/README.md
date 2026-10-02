@@ -63,7 +63,7 @@ Claude Code via the native installer, `ccstatusline` (pinned npm global).
 | ------------- | --------------------------------- |
 | PostgreSQL 16 | `localhost:5432` (+ PostGIS)      |
 | MongoDB 8.0   | `localhost:27017`                 |
-| Redis         | `localhost:6379`                  |
+| Valkey        | `localhost:6379`                  |
 | RabbitMQ      | `localhost:5672` (UI `:15672`)    |
 | ActiveMQ      | `localhost:61616`                 |
 
@@ -72,7 +72,7 @@ loopback `trust` auth; RabbitMQ gets the delayed-message-exchange plugin + manag
 
 ```bash
 brew services list              # see status
-brew services restart redis     # restart one
+brew services restart valkey    # restart one
 ```
 
 ### Shell & dev settings

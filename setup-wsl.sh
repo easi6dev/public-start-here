@@ -83,7 +83,7 @@ ERLANG_PKGS=(
     erlang-syntax-tools erlang-tftp erlang-tools erlang-xmerl
 )
 SERVICE_PKGS=(
-    mongodb-org rabbitmq-server postgresql-16 postgresql-16-postgis-3 redis-server
+    mongodb-org rabbitmq-server postgresql-16 postgresql-16-postgis-3
     unzip jq git openjdk-21-jdk build-essential zsh
 )
 
@@ -259,6 +259,13 @@ else
         else
             warn "activemq formula not found in Homebrew — install manually"
         fi
+    fi
+
+    # Valkey (key-value store on localhost:6379; runs as a brew user service)
+    if brew list valkey &>/dev/null; then
+        skip "valkey"
+    else
+        brew install valkey || warn "Failed to install valkey"
     fi
 
 fi
@@ -715,12 +722,13 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
 done
 
 # --- Enable user lingering (so user-level systemd services start at boot) ---
-# ActiveMQ runs as a systemd *user* service (created by `brew services start activemq`
-# below), which only auto-starts on a cold WSL boot when lingering is enabled for this
-# user. The DB services are system units and already start at boot; without this, ActiveMQ
-# alone would fail to come up after a login-less boot. loginctl needs systemd active; if
-# systemd isn't running yet, this warns and is a no-op (re-run once systemd is enabled).
-step "Enabling user lingering (boot-time ActiveMQ)"
+# Valkey and ActiveMQ run as systemd *user* services (created by `brew services start`
+# below), which only auto-start on a cold WSL boot when lingering is enabled for this
+# user. The remaining DB services are system units and already start at boot; without
+# this, Valkey and ActiveMQ would fail to come up after a login-less boot. loginctl needs
+# systemd active; if systemd isn't running yet, this warns and is a no-op (re-run once
+# systemd is enabled).
+step "Enabling user lingering (boot-time Valkey and ActiveMQ)"
 LINGER_USER="$(whoami)"
 if [ "$(loginctl show-user "$LINGER_USER" --property=Linger 2>/dev/null || true)" = "Linger=yes" ]; then
     skip "lingering already enabled for $LINGER_USER"
@@ -737,9 +745,9 @@ fi
 step "Starting services"
 start_service postgresql
 start_service mongod
-start_service redis-server
 start_service rabbitmq-server
 if command_exists brew; then
+    brew services start valkey 2>/dev/null || true
     brew services start activemq 2>/dev/null || true
 fi
 ok "All services started"
@@ -762,13 +770,18 @@ check_service() {
 
 check_service "PostgreSQL 16"  postgresql
 check_service "MongoDB 8.0"   mongod
-check_service "Redis"          redis-server
 check_service "RabbitMQ"       rabbitmq-server
 
 if pgrep -f activemq >/dev/null 2>&1; then
     ok "ActiveMQ is running"
 else
     warn "ActiveMQ is NOT running — try: brew services start activemq"
+fi
+
+if pgrep -f valkey-server >/dev/null 2>&1; then
+    ok "Valkey is running"
+else
+    warn "Valkey is NOT running — try: brew services start valkey"
 fi
 
 # --- Done ---
@@ -778,7 +791,7 @@ echo ""
 echo "  Service ports:"
 echo "    - PostgreSQL 16  (localhost:5432)"
 echo "    - MongoDB 8.0    (localhost:27017)"
-echo "    - Redis           (localhost:6379)"
+echo "    - Valkey          (localhost:6379)"
 echo "    - RabbitMQ        (localhost:5672, management: localhost:15672)"
 echo "    - ActiveMQ        (localhost:61616)"
 echo ""

@@ -525,7 +525,7 @@ else { Write-Skip "$backendDir not found" }
 
 Write-Step "WSL Ubuntu-24.04"
 Write-Host "    Unregistering WSL Ubuntu-24.04 will DELETE all data inside it." -ForegroundColor Red
-Write-Host "    (PostgreSQL, MongoDB, Redis, RabbitMQ, brew, all WSL files)" -ForegroundColor Red
+Write-Host "    (PostgreSQL, MongoDB, Valkey, RabbitMQ, brew, all WSL files)" -ForegroundColor Red
 Write-Host ""
 $wslChoice = Read-Host "    Remove WSL Ubuntu-24.04? (y/N)"
 if ($wslChoice -eq "y" -or $wslChoice -eq "Y") {

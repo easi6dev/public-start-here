@@ -201,7 +201,7 @@ step "Installing database & message services"
 
 install_formula "postgresql@16" "PostgreSQL 16"
 install_formula "postgis" "PostGIS"
-install_formula "redis" "Redis"
+install_formula "valkey" "Valkey"
 install_formula "rabbitmq" "RabbitMQ"
 install_formula "activemq" "ActiveMQ"
 
@@ -219,7 +219,7 @@ fi
 step "Starting services"
 brew services start postgresql@16 2>/dev/null && ok "PostgreSQL started" || warn "PostgreSQL start failed"
 brew services start mongodb-community@8.0 2>/dev/null && ok "MongoDB started" || warn "MongoDB start failed"
-brew services start redis 2>/dev/null && ok "Redis started" || warn "Redis start failed"
+brew services start valkey 2>/dev/null && ok "Valkey started" || warn "Valkey start failed"
 brew services start rabbitmq 2>/dev/null && ok "RabbitMQ started" || warn "RabbitMQ start failed"
 brew services start activemq 2>/dev/null && ok "ActiveMQ started" || warn "ActiveMQ start failed"
 
@@ -718,7 +718,7 @@ cat <<'DONE'
   Service ports (native, all on localhost):
     - PostgreSQL 16  (localhost:5432)
     - MongoDB 8.0    (localhost:27017)
-    - Redis           (localhost:6379)
+    - Valkey          (localhost:6379)
     - RabbitMQ        (localhost:5672, management UI: http://localhost:15672)
     - ActiveMQ        (localhost:61616)
 
