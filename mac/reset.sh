@@ -40,10 +40,10 @@ if ! command_exists brew; then warn "Homebrew not found — most steps will be s
 
 # --- Stop & uninstall services ---
 step "Stopping and removing services"
-for svc in postgresql@16 mongodb-community@8.0 valkey rabbitmq activemq; do
+for svc in postgresql@17 mongodb-community valkey rabbitmq activemq; do
     brew services stop "$svc" 2>/dev/null || true
 done
-for f in postgresql@16 postgis mongodb-community@8.0 valkey rabbitmq activemq; do
+for f in postgresql@17 postgis mongodb-community valkey rabbitmq activemq; do
     if brew list --formula "$f" &>/dev/null; then brew uninstall --force "$f" 2>/dev/null && ok "$f removed" || warn "could not remove $f"; else skip "$f not installed"; fi
 done
 
