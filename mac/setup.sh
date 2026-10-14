@@ -12,7 +12,7 @@
 set -uo pipefail   # NOTE: no -e — like the originals, we want a failed step to warn and continue.
 
 # --- Version banner (bump on every change; lets you tell a cached run from the latest) ---
-SETUP_VERSION="2026-06-23.1"
+SETUP_VERSION="2026-10-13.1"
 
 # --- Helpers ---
 
@@ -21,6 +21,11 @@ ok()    { printf '    \033[32m[OK]\033[0m %s\n' "$1"; }
 skip()  { printf '    \033[33m[SKIP]\033[0m %s\n' "$1"; }
 warn()  { printf '    \033[33m[WARN]\033[0m %s\n' "$1"; }
 info()  { printf '    %s\n' "$1"; }
+
+# fail = warn + remember it, so the end of the run can list everything that went wrong.
+# A plain newline-joined string (not an array): bash 3.2 + `set -u` errors on empty arrays.
+FAILED_STEPS=""
+fail()  { warn "$1"; FAILED_STEPS="${FAILED_STEPS}    - $1"$'\n'; }
 
 command_exists() { command -v "$1" &>/dev/null; }
 
@@ -117,7 +122,7 @@ install_cask() {
         return
     fi
     info "Installing $name ..."
-    if brew install --cask "$id"; then ok "$name installed"; else warn "$name install may have failed"; fi
+    if brew install --cask "$id"; then ok "$name installed"; else fail "$name install may have failed"; fi
 }
 
 # Helper: install a formula (CLI), skipping if already present
@@ -127,7 +132,7 @@ install_formula() {
         skip "$name already installed"
     else
         info "Installing $name ..."
-        if brew install "$id"; then ok "$name installed"; else warn "$name install may have failed"; fi
+        if brew install "$id"; then ok "$name installed"; else fail "$name install may have failed"; fi
     fi
 }
 
@@ -182,6 +187,7 @@ CLI_FORMULAE=(
     "eza|eza"
     "sd|sd"
     "ktlint|ktlint"
+    "coreutils|GNU coreutils"
 )
 for entry in "${CLI_FORMULAE[@]}"; do
     install_formula "${entry%%|*}" "${entry#*|}"
@@ -192,36 +198,75 @@ if brew list --formula openjdk@21 &>/dev/null; then
     sudo ln -sfn "$BREW_PREFIX/opt/openjdk@21/libexec/openjdk.jdk" \
         "/Library/Java/JavaVirtualMachines/openjdk-21.jdk" 2>/dev/null \
         && ok "OpenJDK 21 linked into /Library/Java/JavaVirtualMachines" \
-        || warn "Could not link OpenJDK 21 system-wide (run the ln -sfn manually if needed)"
+        || fail "Could not link OpenJDK 21 system-wide (run the ln -sfn manually if needed)"
 fi
 
 # --- Database / message services (native via brew, NO WSL) ---
 
 step "Installing database & message services"
 
-install_formula "postgresql@16" "PostgreSQL 16"
+install_formula "postgresql@17" "PostgreSQL 17"
+# An older setup's postgresql@16 would hold port 5432, so @17 could not start.
+if brew list --formula postgresql@16 &>/dev/null; then
+    fail "postgresql@16 is also installed and may hold port 5432 — run: brew services stop postgresql@16"
+fi
 install_formula "postgis" "PostGIS"
-install_formula "valkey" "Valkey"
+
+# Valkey replaces Redis. brew's valkey conflicts with brew's redis (both want :6379), so an
+# older setup's redis must go first — same as tada-docker-compose/scripts/migrate_redis_to_valkey.sh.
+if brew list --formula redis &>/dev/null && ! brew list --formula valkey &>/dev/null; then
+    warn "Homebrew redis is installed; it conflicts with valkey (both use port 6379)."
+    info "Replacing it stops and uninstalls brew redis. Local Redis data is lost (local cache only)."
+    REDIS_ANSWER=""
+    read -r -p "    Uninstall redis and install valkey? (y/n) " REDIS_ANSWER
+    if [ "$REDIS_ANSWER" = "${REDIS_ANSWER#[Yy]}" ]; then
+        fail "Valkey not installed (kept redis) — later run tada-docker-compose/scripts/migrate_redis_to_valkey.sh"
+    else
+        brew services stop redis &>/dev/null || true
+        if brew uninstall --force redis; then
+            ok "Homebrew redis uninstalled"
+            install_formula "valkey" "Valkey"
+        else
+            fail "Could not uninstall Homebrew redis — Valkey not installed"
+        fi
+    fi
+else
+    install_formula "valkey" "Valkey"
+fi
+
 install_formula "rabbitmq" "RabbitMQ"
 install_formula "activemq" "ActiveMQ"
 
-# MongoDB lives in a tap
-if brew list --formula mongodb-community@8.0 &>/dev/null; then
-    skip "MongoDB 8.0 already installed"
+# MongoDB lives in a tap. Newer Homebrew refuses formulae from untrusted third-party taps
+# (for install AND `brew services`), so trust the specific formulae — not the whole tap — on
+# every run (idempotent). mongodb-enterprise is only loaded for mongodb-community's
+# conflicts_with check; it is NOT installed. Older Homebrew has no `brew trust` and needs none.
+if brew commands --quiet 2>/dev/null | grep -qx trust; then
+    if ! TRUST_OUT="$(brew trust --formula mongodb/brew/mongodb-community \
+            mongodb/brew/mongodb-database-tools mongodb/brew/mongodb-enterprise 2>&1)"; then
+        fail "brew trust for the MongoDB formulae failed — MongoDB install/start will be refused"
+    elif printf '%s\n' "$TRUST_OUT" | grep -q '^Trusted formula'; then
+        ok "MongoDB formulae trusted (mongodb-community, mongodb-database-tools, mongodb-enterprise)"
+    else
+        skip "MongoDB formulae already trusted"
+    fi
+fi
+if brew list --formula mongodb-community &>/dev/null; then
+    skip "MongoDB already installed"
 else
     brew tap mongodb/brew 2>/dev/null || true
-    info "Installing MongoDB 8.0 ..."
-    if brew install mongodb-community@8.0; then ok "MongoDB 8.0 installed"; else warn "MongoDB install may have failed"; fi
+    info "Installing MongoDB ..."
+    if brew install mongodb-community; then ok "MongoDB installed"; else fail "MongoDB install may have failed"; fi
 fi
 
 # --- Start services (brew services) ---
 
 step "Starting services"
-brew services start postgresql@16 2>/dev/null && ok "PostgreSQL started" || warn "PostgreSQL start failed"
-brew services start mongodb-community@8.0 2>/dev/null && ok "MongoDB started" || warn "MongoDB start failed"
-brew services start valkey 2>/dev/null && ok "Valkey started" || warn "Valkey start failed"
-brew services start rabbitmq 2>/dev/null && ok "RabbitMQ started" || warn "RabbitMQ start failed"
-brew services start activemq 2>/dev/null && ok "ActiveMQ started" || warn "ActiveMQ start failed"
+brew services start postgresql@17 2>/dev/null && ok "PostgreSQL started" || fail "PostgreSQL start failed"
+brew services start mongodb-community 2>/dev/null && ok "MongoDB started" || fail "MongoDB start failed"
+brew services start valkey 2>/dev/null && ok "Valkey started" || fail "Valkey start failed"
+brew services start rabbitmq 2>/dev/null && ok "RabbitMQ started" || fail "RabbitMQ start failed"
+brew services start activemq 2>/dev/null && ok "ActiveMQ started" || fail "ActiveMQ start failed"
 
 # Give PostgreSQL a moment to accept connections before configuring it
 sleep 3
@@ -231,9 +276,9 @@ sleep 3
 # so backend services connect without a password in dev. brew runs postgres as the current
 # macOS user (not a 'postgres' OS user), so we connect to the default 'postgres' db as $USER.
 
-step "Configuring PostgreSQL 16"
+step "Configuring PostgreSQL 17"
 
-PSQL="$BREW_PREFIX/opt/postgresql@16/bin/psql"
+PSQL="$BREW_PREFIX/opt/postgresql@17/bin/psql"
 [ -x "$PSQL" ] || PSQL="psql"
 
 if "$PSQL" -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='admin'" 2>/dev/null | grep -q 1; then
@@ -242,11 +287,11 @@ else
     if "$PSQL" -d postgres -c "CREATE ROLE admin SUPERUSER LOGIN" 2>/dev/null; then
         ok "PostgreSQL admin superuser created"
     else
-        warn "Could not create admin role — is PostgreSQL running? (brew services list)"
+        fail "Could not create admin role — is PostgreSQL running? (brew services list)"
     fi
 fi
 
-PG_HBA="$BREW_PREFIX/var/postgresql@16/pg_hba.conf"
+PG_HBA="$BREW_PREFIX/var/postgresql@17/pg_hba.conf"
 if [ -f "$PG_HBA" ]; then
     if grep -qE '^\s*host\s+all\s+all\s+127\.0\.0\.1/32\s+trust' "$PG_HBA"; then
         skip "pg_hba.conf already set to trust on 127.0.0.1"
@@ -255,11 +300,11 @@ if [ -f "$PG_HBA" ]; then
         # Loopback (IPv4 + IPv6) -> trust
         sed -i '' -E 's#^([[:space:]]*host[[:space:]]+all[[:space:]]+all[[:space:]]+127\.0\.0\.1/32[[:space:]]+).*#\1trust#' "$PG_HBA" 2>/dev/null || true
         sed -i '' -E 's#^([[:space:]]*host[[:space:]]+all[[:space:]]+all[[:space:]]+::1/128[[:space:]]+).*#\1trust#' "$PG_HBA" 2>/dev/null || true
-        brew services restart postgresql@16 2>/dev/null || true
+        brew services restart postgresql@17 2>/dev/null || true
         ok "pg_hba.conf set to trust on loopback and PostgreSQL restarted"
     fi
 else
-    warn "pg_hba.conf not found at $PG_HBA — configure trust auth manually"
+    fail "pg_hba.conf not found at $PG_HBA — configure trust auth manually"
 fi
 
 # --- RabbitMQ: delayed message exchange plugin + management UI ---
@@ -282,20 +327,22 @@ if command_exists rabbitmq-plugins; then
         [ -z "$PLUGIN_VER" ] && PLUGIN_VER="4.0.2" && warn "Could not detect plugin version, using fallback $PLUGIN_VER"
         if curl -sL -o "/tmp/rmq_delayed-${PLUGIN_VER}.ez" \
             "https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/releases/download/v${PLUGIN_VER}/rabbitmq_delayed_message_exchange-${PLUGIN_VER}.ez"; then
-            cp "/tmp/rmq_delayed-${PLUGIN_VER}.ez" "$PLUGIN_DIR/" && rm -f "/tmp/rmq_delayed-${PLUGIN_VER}.ez"
+            # Save under the plugin's real name so the already-installed check above matches on re-runs.
+            cp "/tmp/rmq_delayed-${PLUGIN_VER}.ez" "$PLUGIN_DIR/rabbitmq_delayed_message_exchange-${PLUGIN_VER}.ez" \
+                && rm -f "/tmp/rmq_delayed-${PLUGIN_VER}.ez"
             ok "Delayed message exchange plugin $PLUGIN_VER installed"
         else
-            warn "Could not download delayed message exchange plugin"
+            fail "Could not download delayed message exchange plugin"
         fi
     else
-        warn "RabbitMQ plugin dir not found ($PLUGIN_DIR) — skipping plugin"
+        fail "RabbitMQ plugin dir not found ($PLUGIN_DIR) — skipping plugin"
     fi
     rabbitmq-plugins enable rabbitmq_delayed_message_exchange 2>/dev/null || true
     rabbitmq-plugins enable rabbitmq_management 2>/dev/null || true
     brew services restart rabbitmq 2>/dev/null || true
     ok "RabbitMQ plugins enabled (delayed exchange + management UI)"
 else
-    warn "rabbitmq-plugins not on PATH — skipped plugin config"
+    fail "rabbitmq-plugins not on PATH — skipped plugin config"
 fi
 
 # --- nvm + Node.js LTS ---
@@ -327,7 +374,7 @@ if command_exists uv; then
         uv python install 3.12 && ok "Python 3.12 installed via uv"
     fi
 else
-    warn "uv not found — install Python manually"
+    fail "uv not found — install Python manually"
 fi
 
 # --- Claude Code (native install) ---
@@ -351,10 +398,10 @@ if command_exists npm; then
     elif npm install -g "ccstatusline@$CCS_VERSION" >/dev/null 2>&1; then
         ok "ccstatusline@$CCS_VERSION installed"
     else
-        warn "ccstatusline install failed — run 'npm install -g ccstatusline@$CCS_VERSION' manually"
+        fail "ccstatusline install failed — run 'npm install -g ccstatusline@$CCS_VERSION' manually"
     fi
 else
-    warn "npm not found — skipping ccstatusline (re-run after nvm sets up Node)"
+    fail "npm not found — skipping ccstatusline (re-run after nvm sets up Node)"
 fi
 
 # ccstatusline reads <home>/.config/ccstatusline/settings.json on every platform.
@@ -421,7 +468,7 @@ if command_exists jq; then
         if jq --arg cmd "$SL_CMD" '.statusLine = {type:"command", command:$cmd, padding:0, refreshInterval:10}' "$SL_SETTINGS" > "$SL_TMP" 2>/dev/null; then
             mv "$SL_TMP" "$SL_SETTINGS"; ok "statusLine merged into settings.json"
         else
-            rm -f "$SL_TMP"; warn "settings.json is not valid JSON — add statusLine manually"
+            rm -f "$SL_TMP"; fail "settings.json is not valid JSON — add statusLine manually"
         fi
     else
         jq -n --arg cmd "$SL_CMD" '{statusLine:{type:"command", command:$cmd, padding:0, refreshInterval:10}}' > "$SL_SETTINGS"
@@ -656,7 +703,7 @@ else
         sudo killall -HUP mDNSResponder 2>/dev/null || true
         ok "host.docker.internal mapped to 127.0.0.1 (DNS cache flushed)"
     else
-        warn "Could not edit /etc/hosts — add manually: 127.0.0.1 host.docker.internal"
+        fail "Could not edit /etc/hosts — add manually: 127.0.0.1 host.docker.internal"
     fi
 fi
 
@@ -700,13 +747,13 @@ else
         if gh api "repos/easi6dev/start-here/contents/teams/server/clone-repos.sh" --jq '.content' >/tmp/clone-repos.b64 2>/dev/null; then
             base64 --decode -i /tmp/clone-repos.b64 > /tmp/clone-repos.sh 2>/dev/null || base64 -d /tmp/clone-repos.b64 > /tmp/clone-repos.sh
             rm -f /tmp/clone-repos.b64
-            bash /tmp/clone-repos.sh && ok "Backend repos cloned" || warn "clone-repos.sh reported errors"
+            bash /tmp/clone-repos.sh && ok "Backend repos cloned" || fail "clone-repos.sh reported errors"
         else
             warn "No clone-repos.sh in easi6dev/start-here/teams/server — clone manually:"
             info "gh repo clone easi6dev/start-here && cd start-here/teams/server && (run the team clone script)"
         fi
     else
-        warn "Not authenticated with GitHub — skipped clone. Run 'gh auth login' and re-run."
+        fail "Not authenticated with GitHub — skipped clone. Run 'gh auth login' and re-run."
     fi
 fi
 
@@ -716,8 +763,8 @@ step "Setup complete!"
 cat <<'DONE'
 
   Service ports (native, all on localhost):
-    - PostgreSQL 16  (localhost:5432)
-    - MongoDB 8.0    (localhost:27017)
+    - PostgreSQL 17  (localhost:5432)
+    - MongoDB        (localhost:27017)
     - Valkey          (localhost:6379)
     - RabbitMQ        (localhost:5672, management UI: http://localhost:15672)
     - ActiveMQ        (localhost:61616)
@@ -726,11 +773,29 @@ cat <<'DONE'
 
   Things to do manually:
     1. Restart your terminal (or: source ~/.zshrc) so PATH / aliases take effect.
-    2. Docker Desktop — open it once to finish first-run setup.
+    2. Docker Desktop — open it once to finish first-run setup, then raise its memory:
+         Settings > Resources > Memory ~24 GB (default ~8 GB is too little), and add swap.
     3. Cloudflare WARP — configure with the team VPN settings:
          https://mvlchain.cloudflareaccess.com/#/Launcher
     4. IntelliJ IDEA — sign in to your JetBrains account, open a backend project to verify.
     5. Set GITHUB_USERNAME / GITHUB_TOKEN if your backend build needs them (PAT with repo + read:packages).
     6. Run 'aws configure' to set up AWS credentials.
+    7. If 'which node' shows Homebrew's node (pulled in by mongosh) instead of nvm's,
+       run 'brew unlink node' — mongosh keeps working.
 
 DONE
+
+# Docker Desktop memory can't be set via a supported CLI, so only check (read-only) and remind.
+DOCKER_SETTINGS="$HOME/Library/Group Containers/group.com.docker/settings-store.json"
+if [ -f "$DOCKER_SETTINGS" ] && command_exists jq; then
+    DOCKER_MEM_MIB="$(jq -r '.MemoryMiB // empty' "$DOCKER_SETTINGS" 2>/dev/null || true)"
+    if [ -n "$DOCKER_MEM_MIB" ] && [ "$DOCKER_MEM_MIB" -lt 24576 ] 2>/dev/null; then
+        warn "Docker Desktop memory is $((DOCKER_MEM_MIB / 1024)) GB — raise it to ~24 GB (Settings > Resources)"
+    fi
+fi
+
+if [ -n "$FAILED_STEPS" ]; then
+    printf '\n\033[31m  These steps failed (scroll up for details, fix, then re-run):\033[0m\n%s\n' "$FAILED_STEPS"
+else
+    ok "No failed steps"
+fi
