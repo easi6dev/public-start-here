@@ -34,7 +34,7 @@ function Show-SetupProblems {
 
 # --- Version banner (bump on every change; lets you tell a cached irm run from the latest) ---
 
-$SetupVersion = "2026-08-03.2"
+$SetupVersion = "2026-10-29.1"
 Write-Host "TADA setup.ps1  version $SetupVersion" -ForegroundColor Cyan
 
 # --- Admin check ---
@@ -540,11 +540,20 @@ if ($existingCcs -ceq $ccsConfig) {
     Write-OK "ccstatusline settings.json written to $ccsConfigPath"
 }
 
-# Claude Code routes the statusLine command through Git Bash on Windows; bare `ccstatusline`
-# resolves to the npm bash-shim on %APPDATA%\npm (added to PATH by the Node LTS installer),
-# matching ccstatusline's own pinned-global convention. If a box ever can't resolve it, fall
-# back to `ccstatusline.cmd` or an absolute path to the npm shim.
+# Claude Code routes the statusLine command through Git Bash on Windows. Bare `ccstatusline`
+# resolves to the npm bash-shim on %APPDATA%\npm, but that shim is a sh script, so every
+# refresh costs bash -> sh -> node (and Claude Code refreshes once per open session). Call
+# node on the package entry directly instead, $HOME-relative so the path has no spaces for
+# `bash -c` to mis-split. Falls back to the bare shim if the entry can't be located.
 $statusLineCommand = 'ccstatusline'
+if (Get-Command npm -ErrorAction SilentlyContinue) {
+    $ccsEntry = Join-Path (npm root -g 2>$null) "ccstatusline\dist\ccstatusline.js"
+    $homePrefix = $env:USERPROFILE + '\'
+    if ((Test-Path $ccsEntry) -and $ccsEntry.StartsWith($homePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $ccsRel = $ccsEntry.Substring($homePrefix.Length) -replace '\\', '/'
+        if ($ccsRel -notmatch '\s') { $statusLineCommand = "node `"`$HOME/$ccsRel`"" }
+    }
+}
 
 # Merge statusLine into settings.json without clobbering existing settings
 $settingsPath = Join-Path $claudeDir "settings.json"
@@ -578,7 +587,7 @@ if (-not $settingsParseFailed -and $settings -is [System.Management.Automation.P
             type            = "command"
             command         = $statusLineCommand
             padding         = 0
-            refreshInterval = 10
+            refreshInterval = 60
         }
         $settings | Add-Member -NotePropertyName statusLine -NotePropertyValue $statusLineObj -Force
         $json = $settings | ConvertTo-Json -Depth 20
