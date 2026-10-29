@@ -573,11 +573,12 @@ if command_exists jq; then
     # '|| true' is required: under 'set -e' a bare assignment from a failing command
     # substitution (e.g. settings.json missing -> jq exits non-zero) aborts the script.
     CUR_SL=$(jq -r '.statusLine.command // empty' "$SL_SETTINGS" 2>/dev/null || true)
-    if [ "$CUR_SL" = "$SL_CMD" ]; then
+    CUR_SL_INT=$(jq -r '.statusLine.refreshInterval // empty' "$SL_SETTINGS" 2>/dev/null || true)
+    if [ "$CUR_SL" = "$SL_CMD" ] && [ "$CUR_SL_INT" = "60" ]; then
         skip "statusLine already configured in settings.json"
     elif [ -f "$SL_SETTINGS" ]; then
         SL_TMP=$(mktemp)
-        if jq --arg cmd "$SL_CMD" '.statusLine = {type:"command", command:$cmd, padding:0, refreshInterval:10}' "$SL_SETTINGS" > "$SL_TMP" 2>/dev/null; then
+        if jq --arg cmd "$SL_CMD" '.statusLine = {type:"command", command:$cmd, padding:0, refreshInterval:60}' "$SL_SETTINGS" > "$SL_TMP" 2>/dev/null; then
             mv "$SL_TMP" "$SL_SETTINGS"
             ok "statusLine merged into settings.json"
         else
@@ -585,7 +586,7 @@ if command_exists jq; then
             warn "settings.json is not valid JSON — add statusLine manually"
         fi
     else
-        jq -n --arg cmd "$SL_CMD" '{statusLine:{type:"command", command:$cmd, padding:0, refreshInterval:10}}' > "$SL_SETTINGS"
+        jq -n --arg cmd "$SL_CMD" '{statusLine:{type:"command", command:$cmd, padding:0, refreshInterval:60}}' > "$SL_SETTINGS"
         ok "settings.json created with statusLine"
     fi
 else
